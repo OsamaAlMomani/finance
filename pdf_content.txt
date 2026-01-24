@@ -1,0 +1,50 @@
+Finance Charts & Business Logic – Developer Guide
+This document describes the most used financial charts, their purpose, and the underlying business logic
+with developer-ready sheet schemas. It is designed to be used directly as a product or engineering
+handoff.
+1. Cash Flow Timeline (Income vs Expenses)
+Purpose: Shows money movement over time and answers whether the user is financially stable.
+Business Logic: Income is positive, expenses are negative. Net = Income + Expenses.
+Sheet Schema: month, income_total, expense_total (negative), net (formula).
+Developer Notes: Persist net values, enforce negative expenses, sort strictly by date.
+2. Net Worth Over Time
+Purpose: Measures real financial health instead of activity.
+Business Logic: Net Worth = Assets − Liabilities.
+Sheet Schema: month, assets_total, liabilities_total, net_worth.
+Developer Notes: This is state data, not flow. Never mix with income or expenses.
+3. Expense Breakdown by Category
+Purpose: Reveals where money actually goes.
+Business Logic: Expenses grouped by category per month.
+Sheet Schema: date, category, amount (negative), recurring.
+Developer Notes: Normalize categories and allow uncategorized entries.
+4. Cumulative Savings Curve
+Purpose: Shows progress momentum and long-term discipline.
+Business Logic: cumulative_savings[n] = cumulative_savings[n-1] + net.
+Sheet Schema: month, net, cumulative_savings.
+Developer Notes: Derived data only; never reset without user intent.
+5. Burn Rate & Runway
+Purpose: Estimates how long funds will last before depletion.
+Business Logic: Burn Rate = average monthly expenses; Runway = cash / burn_rate.
+Sheet Schema: current_cash, avg_monthly_burn, runway_months.
+Developer Notes: Ignore income intentionally when calculating burn rate.
+6. Forecast vs Actual
+Purpose: Compares planning versus reality to improve accuracy.
+Business Logic: Variance = Actual − Forecast.
+Sheet Schema: month, forecast_income, forecast_expense, actual_income, actual_expense.
+Developer Notes: Lock past months and allow forecast edits for future periods.
+
+7. Income Source Distribution
+Purpose: Evaluates income stability and diversification.
+Business Logic: Group income by source and sum amounts.
+Sheet Schema: date, source, amount.
+Developer Notes: Never mix expenses here; prepare for tax logic expansion.
+8. Cost of Living & Inflation Context
+Purpose: Adds economic context to user spending behavior.
+Business Logic: External indexed data compared against user expenses.
+Sheet Schema: month, category, index_value.
+Developer Notes: Read-only reference data; cache aggressively.
+
+Architecture Insight
+A production-grade finance system separates raw events (income, expenses), derived states (net,
+savings, runway), and contextual data (inflation indexes). This separation prevents logic bugs and enables
+scalable analytics.
