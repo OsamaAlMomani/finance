@@ -12,6 +12,8 @@ import CostOfLiving from './tools/CostOfLiving'
 import CalendarPlanning from './tools/CalendarPlanning'
 import ScenarioPlanner from './tools/ScenarioPlanner'
 import DangerSafetyMeter from './tools/DangerSafetyMeter'
+import TodoList from './tools/TodoList'
+import EnhancedCalendar from './tools/EnhancedCalendar'
 
 interface Tool {
   id: string
@@ -110,6 +112,22 @@ const tools: Tool[] = [
     icon: '🚨',
     color: '#E74C3C',
     component: DangerSafetyMeter
+  },
+  {
+    id: 'todo-list',
+    title: 'Task Manager',
+    description: 'Manage tasks with time tracking',
+    icon: '✓',
+    color: '#27AE60',
+    component: TodoList
+  },
+  {
+    id: 'enhanced-calendar',
+    title: 'Enhanced Calendar',
+    description: 'Smooth calendar with multiple views',
+    icon: '📆',
+    color: '#8E44AD',
+    component: EnhancedCalendar
   }
 ]
 

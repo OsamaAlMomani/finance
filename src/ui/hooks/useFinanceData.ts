@@ -5,7 +5,8 @@ import type {
   Expense,
   IncomeSource,
   Forecast,
-  CalendarEvent
+  CalendarEvent,
+  TransactionFilter
 } from '../../services/database'
 
 // Get the electron ipcRenderer from window.electron (exposed by preload script)
@@ -17,7 +18,7 @@ if (!ipc) {
 
 // ============ TRANSACTIONS HOOK ============
 
-export function useTransactions() {
+export function useTransactions(filters?: TransactionFilter) {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -25,7 +26,9 @@ export function useTransactions() {
   const fetchTransactions = useCallback(async () => {
     try {
       setLoading(true)
-      const data = await ipc?.invoke('get-transactions')
+      const data = filters
+        ? await ipc?.invoke('get-transactions-filtered', filters)
+        : await ipc?.invoke('get-transactions')
       setTransactions(data)
       setError(null)
     } catch (err) {
@@ -33,7 +36,7 @@ export function useTransactions() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [filters])
 
   const addTransaction = useCallback(async (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => {
     try {
@@ -42,6 +45,17 @@ export function useTransactions() {
       return newTransaction
     } catch (err) {
       throw err instanceof Error ? err : new Error('Failed to add transaction')
+    }
+  }, [])
+
+  const updateTransaction = useCallback(async (id: string, updates: Partial<Transaction>) => {
+    try {
+      await ipc?.invoke('update-transaction', id, updates)
+      setTransactions(prev =>
+        prev.map(t => t.id === id ? { ...t, ...updates } : t)
+      )
+    } catch (err) {
+      throw err instanceof Error ? err : new Error('Failed to update transaction')
     }
   }, [])
 
@@ -64,7 +78,7 @@ export function useTransactions() {
     }
   }, [fetchTransactions])
 
-  return { transactions, loading, error, addTransaction, deleteTransaction, refetch: fetchTransactions }
+  return { transactions, loading, error, addTransaction, updateTransaction, deleteTransaction, refetch: fetchTransactions }
 }
 
 // ============ NET WORTH HOOK ============

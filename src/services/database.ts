@@ -239,6 +239,66 @@ export function updateTransaction(id: string, updates: Partial<Transaction>) {
   })
 }
 
+export interface TransactionFilter {
+  startDate?: string
+  endDate?: string
+  category?: string
+  type?: 'income' | 'expense' | 'all'
+  searchText?: string
+  minAmount?: number
+  maxAmount?: number
+}
+
+export function getTransactionsFiltered(filters: TransactionFilter = {}) {
+  return new Promise<Transaction[]>((resolve, reject) => {
+    let query = `SELECT * FROM transactions WHERE 1=1`
+    const params: any[] = []
+
+    if (filters.startDate) {
+      query += ` AND date >= ?`
+      params.push(filters.startDate)
+    }
+
+    if (filters.endDate) {
+      query += ` AND date <= ?`
+      params.push(filters.endDate)
+    }
+
+    if (filters.category && filters.category !== 'All') {
+      query += ` AND category = ?`
+      params.push(filters.category)
+    }
+
+    if (filters.type && filters.type !== 'all') {
+      query += ` AND type = ?`
+      params.push(filters.type)
+    }
+
+    if (filters.searchText) {
+      query += ` AND (description LIKE ? OR category LIKE ?)`
+      const searchTerm = `%${filters.searchText}%`
+      params.push(searchTerm, searchTerm)
+    }
+
+    if (typeof filters.minAmount === 'number') {
+      query += ` AND amount >= ?`
+      params.push(filters.minAmount)
+    }
+
+    if (typeof filters.maxAmount === 'number') {
+      query += ` AND amount <= ?`
+      params.push(filters.maxAmount)
+    }
+
+    query += ` ORDER BY date DESC`
+
+    db.all(query, params, (err, rows: Transaction[]) => {
+      if (err) reject(err)
+      else resolve(rows || [])
+    })
+  })
+}
+
 // ============ NET WORTH OPERATIONS ============
 
 export interface NetWorthEntry {
@@ -453,6 +513,58 @@ export interface CalendarEvent {
   amount: number
   type: 'income' | 'expense'
   recurring: 'once' | 'weekly' | 'monthly' | 'yearly'
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TodoSubtask {
+  id: string
+  title: string
+  completed: boolean
+}
+
+export interface TodoItem {
+  id: string
+  title: string
+  description: string
+  dueDate: string
+  dueTime?: string
+  priority: 'high' | 'medium' | 'low'
+  category: 'General' | 'Work' | 'Personal' | 'Financial' | 'Health'
+  completed: boolean
+  estimatedHours: number
+  actualHours?: number
+  subtasks: TodoSubtask[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DashboardConfig {
+  id?: string
+  toolIds: string[]
+  toolSettings: Record<string, any>
+  theme?: string
+  layout?: 'grid' | 'list'
+  updatedAt?: string
+}
+
+export interface AnalyticsData {
+  id?: string
+  date: string
+  metric: string
+  value: number
+  category?: string
+  createdAt?: string
+}
+
+export interface Alert {
+  id: string
+  type: 'threshold' | 'milestone' | 'reminder'
+  title: string
+  message: string
+  threshold?: number
+  metric: string
+  active: boolean
   createdAt: string
   updatedAt: string
 }
