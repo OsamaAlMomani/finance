@@ -11,6 +11,10 @@ node_modules
 dist
 react-dist
 *.local
+Release/
+release/
+Archive/
+archive/
 
 # Editor directories and files
 .vscode/*
