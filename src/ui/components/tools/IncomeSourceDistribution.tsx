@@ -1,76 +1,62 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
-
-interface IncomeSource {
-  source: string
-  amount: number
-  date: string
-}
+import { useIncomeSources } from '../../hooks/useFinanceData'
 
 const COLORS = ['#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA15E', '#BC6C25', '#9D84B7', '#FF6B6B']
 
 export default function IncomeSourceDistribution() {
-  const [incomes, setIncomes] = useState<IncomeSource[]>([
-    { source: 'Salary', amount: 4000, date: '2024-01-15' },
-    { source: 'Freelance', amount: 1000, date: '2024-01-20' },
-    { source: 'Investment', amount: 500, date: '2024-01-25' },
-    { source: 'Salary', amount: 4000, date: '2024-02-15' },
-    { source: 'Freelance', amount: 800, date: '2024-02-20' },
-    { source: 'Bonus', amount: 1500, date: '2024-02-28' },
-  ])
-
+  const { incomeSources, loading, error, addIncomeSource, deleteIncomeSource } = useIncomeSources()
   const [newSource, setNewSource] = useState('')
   const [newAmount, setNewAmount] = useState('')
   const [newDate, setNewDate] = useState('')
 
-  const addIncome = () => {
-    if (!newSource || !newAmount || !newDate) return
+  const totalIncome = useMemo(() => incomeSources.reduce((sum, i) => sum + i.amount, 0), [incomeSources])
 
-    const newIncome: IncomeSource = {
-      source: newSource,
-      amount: parseFloat(newAmount),
-      date: newDate,
-    }
-
-    setIncomes([...incomes, newIncome])
-    setNewSource('')
-    setNewAmount('')
-    setNewDate('')
-  }
-
-  const deleteIncome = (idx: number) => {
-    setIncomes(incomes.filter((_, i) => i !== idx))
-  }
-
-  // Group by source
-  const groupedBySource = incomes.reduce((acc, income) => {
-    const existing = acc.find(g => g.source === income.source)
-    if (existing) {
-      existing.amount += income.amount
-      existing.count += 1
-    } else {
-      acc.push({ source: income.source, amount: income.amount, count: 1 })
-    }
+  const groupedBySource = useMemo(() => {
+    const acc: Array<{ source: string; amount: number; count: number }> = []
+    incomeSources.forEach(income => {
+      const existing = acc.find(g => g.source === income.source)
+      if (existing) {
+        existing.amount += income.amount
+        existing.count += 1
+      } else {
+        acc.push({ source: income.source, amount: income.amount, count: 1 })
+      }
+    })
     return acc
-  }, [] as Array<{ source: string; amount: number; count: number }>)
+  }, [incomeSources])
 
-  // Group by month
-  const groupedByMonth: Array<{ month: string; total: number }> = []
-  incomes.forEach(income => {
-    const month = income.date.substring(0, 7) // YYYY-MM
-    const existing = groupedByMonth.find(g => g.month === month)
-    if (existing) {
-      existing.total += income.amount
-    } else {
-      groupedByMonth.push({ month, total: income.amount })
-    }
-  })
+  const groupedByMonth = useMemo(() => {
+    const result: Array<{ month: string; total: number }> = []
+    incomeSources.forEach(income => {
+      const month = income.date.substring(0, 7)
+      const existing = result.find(g => g.month === month)
+      if (existing) existing.total += income.amount
+      else result.push({ month, total: income.amount })
+    })
+    return result
+  }, [incomeSources])
 
-  const totalIncome = incomes.reduce((sum, i) => sum + i.amount, 0)
-  const avgPerSource = (totalIncome / groupedBySource.length).toFixed(0)
+  const avgPerSource = groupedBySource.length ? (totalIncome / groupedBySource.length).toFixed(0) : '0'
   const sources = groupedBySource.length
   const diversification = sources > 2 ? 'Well Diversified' : sources === 2 ? 'Somewhat Diversified' : 'Limited'
 
+  const handleAddIncome = async () => {
+    if (!newSource || !newAmount || !newDate) return
+    try {
+      await addIncomeSource({ source: newSource, amount: parseFloat(newAmount), date: newDate })
+      setNewSource('')
+      setNewAmount('')
+      setNewDate('')
+    } catch (err) {
+      console.error('Error adding income source', err)
+    }
+  }
+
+  if (loading) return <div className="tool-container"><p>Loading income sources...</p></div>
+  if (error) return <div className="tool-container"><p className="error">{error}</p></div>
+
+  // Group by source
   return (
     <div className="tool-container">
       <h2>💱 Income Source Distribution</h2>
@@ -150,7 +136,7 @@ export default function IncomeSourceDistribution() {
             value={newDate}
             onChange={(e) => setNewDate(e.target.value)}
           />
-          <button onClick={addIncome}>Add Income</button>
+          <button onClick={handleAddIncome}>Add Income</button>
         </div>
       </div>
 
@@ -177,7 +163,7 @@ export default function IncomeSourceDistribution() {
             <tr style={{ fontWeight: 'bold', backgroundColor: '#f5f5f5' }}>
               <td>Total</td>
               <td className="positive">${totalIncome.toLocaleString()}</td>
-              <td>{incomes.length}</td>
+              <td>{incomeSources.length}</td>
               <td>100%</td>
             </tr>
           </tbody>
@@ -196,13 +182,13 @@ export default function IncomeSourceDistribution() {
             </tr>
           </thead>
           <tbody>
-            {incomes.map((income, idx) => (
-              <tr key={idx}>
+            {incomeSources.map((income) => (
+              <tr key={income.id}>
                 <td>{income.date}</td>
                 <td>{income.source}</td>
                 <td className="positive">${income.amount.toLocaleString()}</td>
                 <td>
-                  <button className="delete-btn" onClick={() => deleteIncome(idx)}>Delete</button>
+                  <button className="delete-btn" onClick={() => deleteIncomeSource(income.id)}>Delete</button>
                 </td>
               </tr>
             ))}

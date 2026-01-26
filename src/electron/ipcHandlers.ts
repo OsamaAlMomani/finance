@@ -49,7 +49,7 @@ import {
   type AnalyticsData,
   type Alert,
   type TransactionFilter
-} from '../services/database'
+} from '../services/database.ts'
 
 let mainWindow: BrowserWindow | null = null
 

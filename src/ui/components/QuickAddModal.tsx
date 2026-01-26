@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTransactions } from '../hooks/useFinanceData'
 import { X } from 'lucide-react'
 import '../styles/QuickAddModal.css'
@@ -6,9 +6,10 @@ import '../styles/QuickAddModal.css'
 interface QuickAddModalProps {
   isOpen: boolean
   onClose: () => void
+  initialType?: 'income' | 'expense'
 }
 
-export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
+export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAddModalProps) {
   const { addTransaction } = useTransactions()
   const [type, setType] = useState<'income' | 'expense'>('expense')
   const [description, setDescription] = useState('')
@@ -17,6 +18,12 @@ export default function QuickAddModal({ isOpen, onClose }: QuickAddModalProps) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!isOpen) return
+    setType(initialType ?? 'expense')
+    setError('')
+  }, [isOpen, initialType])
 
   const commonCategories = type === 'expense'
     ? ['Food', 'Transport', 'Health', 'Entertainment', 'Utilities', 'Other']

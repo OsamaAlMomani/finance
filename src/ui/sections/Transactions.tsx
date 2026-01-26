@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useTransactions } from '../hooks/useFinanceData'
-import { Trash2, Edit2, Plus, Filter, X } from 'lucide-react'
+import { Trash2, Edit2, Plus, Filter } from 'lucide-react'
 import '../styles/Transactions.css'
 
 export default function Transactions() {
@@ -15,7 +15,7 @@ export default function Transactions() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<any>({})
 
-  const { transactions, loading, addTransaction, updateTransaction, deleteTransaction } = useTransactions(
+  const { transactions, loading, updateTransaction, deleteTransaction } = useTransactions(
     filters.startDate || filters.endDate || filters.category !== 'All' || filters.type !== 'all' || filters.searchText
       ? filters
       : undefined

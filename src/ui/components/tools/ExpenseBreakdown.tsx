@@ -1,57 +1,50 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
-
-interface ExpenseCategory {
-  category: string
-  amount: number
-  recurring: boolean
-}
+import { useExpenses } from '../../hooks/useFinanceData'
 
 const COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA15E', '#BC6C25', '#9D84B7']
 
 const DEFAULT_CATEGORIES = ['Housing', 'Food', 'Transportation', 'Utilities', 'Entertainment', 'Healthcare', 'Education', 'Other']
 
 export default function ExpenseBreakdown() {
-  const [expenses, setExpenses] = useState<ExpenseCategory[]>([
-    { category: 'Housing', amount: 1500, recurring: true },
-    { category: 'Food', amount: 600, recurring: true },
-    { category: 'Transportation', amount: 400, recurring: true },
-    { category: 'Utilities', amount: 200, recurring: true },
-    { category: 'Entertainment', amount: 300, recurring: false },
-    { category: 'Healthcare', amount: 150, recurring: false },
-  ])
-
+  const { expenses, loading, error, addExpense, deleteExpense } = useExpenses()
   const [newCategory, setNewCategory] = useState('')
   const [newAmount, setNewAmount] = useState('')
   const [isRecurring, setIsRecurring] = useState(true)
+  const [date, setDate] = useState('')
+  const [description, setDescription] = useState('')
 
-  const addExpense = () => {
-    if (!newCategory || !newAmount) return
-
-    const amount = parseFloat(newAmount)
-    const newExpense: ExpenseCategory = {
-      category: newCategory,
-      amount,
-      recurring: isRecurring,
-    }
-
-    setExpenses([...expenses, newExpense])
-    setNewCategory('')
-    setNewAmount('')
-  }
-
-  const deleteExpense = (idx: number) => {
-    setExpenses(expenses.filter((_, i) => i !== idx))
-  }
-
-  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0)
-  const recurringExpenses = expenses.filter(e => e.recurring).reduce((sum, e) => sum + e.amount, 0)
+  const totalExpenses = useMemo(() => expenses.reduce((sum, e) => sum + e.amount, 0), [expenses])
+  const recurringExpenses = useMemo(() => expenses.filter(e => e.recurring).reduce((sum, e) => sum + e.amount, 0), [expenses])
   const oneTimeExpenses = totalExpenses - recurringExpenses
 
-  const chartData = expenses.map(e => ({
-    name: e.category,
+  const chartData = useMemo(() => expenses.map(e => ({
+    name: e.category || 'Uncategorized',
     value: e.amount,
-  }))
+  })), [expenses])
+
+  const handleAddExpense = async () => {
+    if (!newCategory || !newAmount || !date) return
+    try {
+      await addExpense({
+        category: newCategory,
+        amount: parseFloat(newAmount),
+        recurring: isRecurring,
+        date,
+        description: description || undefined
+      })
+      setNewCategory('')
+      setNewAmount('')
+      setIsRecurring(true)
+      setDate('')
+      setDescription('')
+    } catch (err) {
+      console.error('Error adding expense', err)
+    }
+  }
+
+  if (loading) return <div className="tool-container"><p>Loading expenses...</p></div>
+  if (error) return <div className="tool-container"><p className="error">{error}</p></div>
 
   return (
     <div className="tool-container">
@@ -110,6 +103,17 @@ export default function ExpenseBreakdown() {
             value={newAmount}
             onChange={(e) => setNewAmount(e.target.value)}
           />
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="Description (optional)"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
           <label>
             <input
               type="checkbox"
@@ -118,7 +122,7 @@ export default function ExpenseBreakdown() {
             />
             Recurring
           </label>
-          <button onClick={addExpense}>Add Expense</button>
+          <button onClick={handleAddExpense}>Add Expense</button>
         </div>
       </div>
 
@@ -134,13 +138,13 @@ export default function ExpenseBreakdown() {
             </tr>
           </thead>
           <tbody>
-            {expenses.map((expense, idx) => (
-              <tr key={idx}>
+            {expenses.map((expense) => (
+              <tr key={expense.id}>
                 <td>{expense.category}</td>
                 <td className="negative">${expense.amount.toLocaleString()}</td>
                 <td>{expense.recurring ? 'Recurring' : 'One-Time'}</td>
                 <td>
-                  <button className="delete-btn" onClick={() => deleteExpense(idx)}>Delete</button>
+                  <button className="delete-btn" onClick={() => deleteExpense(expense.id)}>Delete</button>
                 </td>
               </tr>
             ))}

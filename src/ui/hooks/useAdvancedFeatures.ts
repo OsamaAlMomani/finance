@@ -1,6 +1,54 @@
 import { useState, useEffect } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 
+// Demo fallbacks so UI is not empty when IPC/database are unavailable
+const DEMO_TODOS: TodoItem[] = [
+  {
+    id: 'todo-1',
+    title: 'Review budget',
+    description: 'Update January budget allocations',
+    dueDate: '2026-01-20',
+    priority: 'high',
+    completed: false,
+    category: 'Planning',
+    createdAt: '',
+    updatedAt: ''
+  },
+  {
+    id: 'todo-2',
+    title: 'Pay utilities',
+    dueDate: '2026-01-15',
+    priority: 'medium',
+    completed: true,
+    category: 'Bills',
+    createdAt: '',
+    updatedAt: ''
+  }
+]
+
+const DEMO_DASHBOARD_CONFIG: DashboardConfig = {
+  id: 'demo',
+  toolIds: ['cash-flow', 'net-worth', 'expense-breakdown', 'todo-list'],
+  toolSettings: {
+    'cash-flow': { visible: true },
+    'net-worth': { visible: true },
+    'expense-breakdown': { visible: true },
+    'todo-list': { visible: true }
+  },
+  theme: 'light',
+  layout: 'grid',
+  updatedAt: ''
+}
+
+const DEMO_ANALYTICS: AnalyticsData[] = [
+  { id: 'a1', date: '2026-01-01', metric: 'savings-rate', value: 18 },
+  { id: 'a2', date: '2026-01-01', metric: 'expense-variance', value: -4 }
+]
+
+const DEMO_ALERTS: Alert[] = [
+  { id: 'al1', type: 'warning', title: 'High burn rate', message: 'Spending trending 8% above plan', active: true, createdAt: '' }
+]
+
 // Get the electron ipcRenderer from window.electron (exposed by preload script)
 const ipc = (window as any).electron?.ipcRenderer
 
@@ -42,8 +90,12 @@ export function useTodos() {
   const fetchTodos = async () => {
     try {
       setLoading(true)
-      const data = await ipc?.invoke('get-todos')
-      setTodos(data || [])
+      if (!ipc) {
+        setTodos(DEMO_TODOS)
+      } else {
+        const data = await ipc.invoke('get-todos')
+        setTodos(data || [])
+      }
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch todos')
@@ -146,8 +198,12 @@ export function useDashboardConfig() {
   const fetchConfig = async () => {
     try {
       setLoading(true)
-      const data = await ipc?.invoke('get-dashboard-config')
-      setConfig(data)
+      if (!ipc) {
+        setConfig(DEMO_DASHBOARD_CONFIG)
+      } else {
+        const data = await ipc.invoke('get-dashboard-config')
+        setConfig(data)
+      }
     } catch (err) {
       console.error('Failed to fetch dashboard config:', err)
     } finally {
@@ -230,8 +286,12 @@ export function useAnalytics() {
   const fetchAnalytics = async (metricType?: string, dateRange?: { start: string; end: string }) => {
     try {
       setLoading(true)
-      const data = await ipc?.invoke('get-analytics', metricType, dateRange)
-      setAnalytics(data || [])
+      if (!ipc) {
+        setAnalytics(DEMO_ANALYTICS)
+      } else {
+        const data = await ipc.invoke('get-analytics', metricType, dateRange)
+        setAnalytics(data || [])
+      }
     } catch (err) {
       console.error('Failed to fetch analytics:', err)
     } finally {
@@ -276,8 +336,12 @@ export function useAlerts() {
   const fetchAlerts = async () => {
     try {
       setLoading(true)
-      const data = await ipc?.invoke('get-alerts')
-      setAlerts(data || [])
+      if (!ipc) {
+        setAlerts(DEMO_ALERTS)
+      } else {
+        const data = await ipc.invoke('get-alerts')
+        setAlerts(data || [])
+      }
     } catch (err) {
       console.error('Failed to fetch alerts:', err)
     } finally {

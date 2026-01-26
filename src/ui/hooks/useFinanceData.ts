@@ -9,6 +9,41 @@ import type {
   TransactionFilter
 } from '../../services/database'
 
+// Lightweight demo data so UI is populated when IPC/database are unavailable
+const DEMO_TRANSACTIONS: Transaction[] = [
+  { id: 't1', type: 'income', description: 'Salary', amount: 3200, date: '2026-01-05', category: 'Salary', recurring: 'monthly', createdAt: '', updatedAt: '' },
+  { id: 't2', type: 'expense', description: 'Rent', amount: 900, date: '2026-01-02', category: 'Housing', recurring: 'monthly', createdAt: '', updatedAt: '' },
+  { id: 't3', type: 'expense', description: 'Groceries', amount: 180, date: '2026-01-08', category: 'Food', recurring: 'weekly', createdAt: '', updatedAt: '' },
+  { id: 't4', type: 'income', description: 'Freelance', amount: 600, date: '2026-01-12', category: 'Side Hustle', recurring: 'once', createdAt: '', updatedAt: '' },
+  { id: 't5', type: 'expense', description: 'Utilities', amount: 140, date: '2026-01-10', category: 'Utilities', recurring: 'monthly', createdAt: '', updatedAt: '' }
+]
+
+const DEMO_NET_WORTH: NetWorthEntry[] = [
+  { id: 'nw1', date: '2025-11-01', assets: 24000, liabilities: 8000, createdAt: '', updatedAt: '' },
+  { id: 'nw2', date: '2025-12-01', assets: 25200, liabilities: 7600, createdAt: '', updatedAt: '' },
+  { id: 'nw3', date: '2026-01-01', assets: 26800, liabilities: 7400, createdAt: '', updatedAt: '' }
+]
+
+const DEMO_EXPENSES: Expense[] = [
+  { id: 'e1', category: 'Housing', amount: 900, recurring: true, date: '2026-01-02', description: 'Rent', createdAt: '', updatedAt: '' },
+  { id: 'e2', category: 'Food', amount: 180, recurring: true, date: '2026-01-08', description: 'Groceries', createdAt: '', updatedAt: '' }
+]
+
+const DEMO_INCOME: IncomeSource[] = [
+  { id: 'i1', source: 'Salary', amount: 3200, date: '2026-01-05', createdAt: '', updatedAt: '' },
+  { id: 'i2', source: 'Freelance', amount: 600, date: '2026-01-12', createdAt: '', updatedAt: '' }
+]
+
+const DEMO_FORECASTS: Forecast[] = [
+  { id: 'f1', month: '2026-01', forecast_income: 3800, forecast_expense: 1900, actual_income: 0, actual_expense: 0, createdAt: '', updatedAt: '' },
+  { id: 'f2', month: '2026-02', forecast_income: 3800, forecast_expense: 1850, actual_income: 0, actual_expense: 0, createdAt: '', updatedAt: '' }
+]
+
+const DEMO_EVENTS: CalendarEvent[] = [
+  { id: 'c1', date: '2026-01-02', description: 'Rent due', amount: -900, type: 'expense', recurring: 'monthly', createdAt: '', updatedAt: '' },
+  { id: 'c2', date: '2026-01-15', description: 'Salary payday', amount: 3200, type: 'income', recurring: 'monthly', createdAt: '', updatedAt: '' }
+]
+
 // Get the electron ipcRenderer from window.electron (exposed by preload script)
 const ipc = (window as any).electron?.ipcRenderer
 
@@ -26,10 +61,17 @@ export function useTransactions(filters?: TransactionFilter) {
   const fetchTransactions = useCallback(async () => {
     try {
       setLoading(true)
-      const data = filters
-        ? await ipc?.invoke('get-transactions-filtered', filters)
-        : await ipc?.invoke('get-transactions')
-      setTransactions(data)
+      if (!ipc) {
+        // Renderer running without Electron/IPC: show demo data
+        setTransactions(DEMO_TRANSACTIONS)
+      } else {
+        const raw: Transaction[] = filters
+          ? await ipc.invoke('get-transactions-filtered', filters)
+          : await ipc.invoke('get-transactions')
+        const cleaned = (raw || []).filter(t => t && typeof t.amount === 'number' && typeof t.date === 'string')
+        const hydrated = (!filters && cleaned.length === 0) ? DEMO_TRANSACTIONS : cleaned
+        setTransactions(hydrated)
+      }
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch transactions')
@@ -91,8 +133,12 @@ export function useNetWorth() {
   const fetchNetWorth = useCallback(async () => {
     try {
       setLoading(true)
-      const data = await ipc?.invoke('get-net-worth')
-      setNetWorthEntries(data)
+      if (!ipc) {
+        setNetWorthEntries(DEMO_NET_WORTH)
+      } else {
+        const data = await ipc.invoke('get-net-worth')
+        setNetWorthEntries(data)
+      }
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch net worth')
@@ -134,8 +180,12 @@ export function useExpenses() {
   const fetchExpenses = useCallback(async () => {
     try {
       setLoading(true)
-      const data = await ipc?.invoke('get-expenses')
-      setExpenses(data)
+      if (!ipc) {
+        setExpenses(DEMO_EXPENSES)
+      } else {
+        const data = await ipc.invoke('get-expenses')
+        setExpenses(data)
+      }
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch expenses')
@@ -186,8 +236,12 @@ export function useIncomeSources() {
   const fetchIncomeSources = useCallback(async () => {
     try {
       setLoading(true)
-      const data = await ipc?.invoke('get-income-sources')
-      setIncomeSources(data)
+      if (!ipc) {
+        setIncomeSources(DEMO_INCOME)
+      } else {
+        const data = await ipc.invoke('get-income-sources')
+        setIncomeSources(data)
+      }
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch income sources')
@@ -238,8 +292,12 @@ export function useForecasts() {
   const fetchForecasts = useCallback(async () => {
     try {
       setLoading(true)
-      const data = await ipc?.invoke('get-forecasts')
-      setForecasts(data)
+      if (!ipc) {
+        setForecasts(DEMO_FORECASTS)
+      } else {
+        const data = await ipc.invoke('get-forecasts')
+        setForecasts(data)
+      }
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch forecasts')
@@ -258,6 +316,16 @@ export function useForecasts() {
     }
   }, [])
 
+  const updateForecast = useCallback(async (id: string, updates: Partial<Forecast>) => {
+    try {
+      if (!ipc) throw new Error('IPC not available')
+      await ipc.invoke('update-forecast', id, updates)
+      setForecasts(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f))
+    } catch (err) {
+      throw err instanceof Error ? err : new Error('Failed to update forecast')
+    }
+  }, [])
+
   useEffect(() => {
     fetchForecasts()
     const unsubscribe = ipc?.on('forecasts-updated', () => {
@@ -268,7 +336,7 @@ export function useForecasts() {
     }
   }, [fetchForecasts])
 
-  return { forecasts, loading, error, addForecast, refetch: fetchForecasts }
+  return { forecasts, loading, error, addForecast, updateForecast, refetch: fetchForecasts }
 }
 
 // ============ CALENDAR EVENTS HOOK ============
@@ -281,8 +349,12 @@ export function useCalendarEvents() {
   const fetchCalendarEvents = useCallback(async () => {
     try {
       setLoading(true)
-      const data = await ipc?.invoke('get-calendar-events')
-      setCalendarEvents(data)
+      if (!ipc) {
+        setCalendarEvents(DEMO_EVENTS)
+      } else {
+        const data = await ipc.invoke('get-calendar-events')
+        setCalendarEvents(data)
+      }
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch calendar events')

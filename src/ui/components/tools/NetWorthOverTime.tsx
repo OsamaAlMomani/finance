@@ -1,50 +1,48 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-
-interface NetWorthData {
-  month: string
-  assets_total: number
-  liabilities_total: number
-  net_worth: number
-}
+import { useNetWorth } from '../../hooks/useFinanceData'
+import { getMonthKey } from '../../../utils/dataAggregation'
 
 export default function NetWorthOverTime() {
-  const [data, setData] = useState<NetWorthData[]>([
-    { month: 'Jan', assets_total: 50000, liabilities_total: 20000, net_worth: 30000 },
-    { month: 'Feb', assets_total: 52000, liabilities_total: 19500, net_worth: 32500 },
-    { month: 'Mar', assets_total: 55000, liabilities_total: 19000, net_worth: 36000 },
-    { month: 'Apr', assets_total: 58000, liabilities_total: 18500, net_worth: 39500 },
-    { month: 'May', assets_total: 61000, liabilities_total: 18000, net_worth: 43000 },
-  ])
-
+  const { netWorthEntries, loading, error, addNetWorthEntry } = useNetWorth()
   const [assets, setAssets] = useState('')
   const [liabilities, setLiabilities] = useState('')
-  const [month, setMonth] = useState('')
+  const [date, setDate] = useState('')
 
-  const addEntry = () => {
-    if (!month || !assets) return
+  const data = useMemo(() => {
+    const sorted = [...netWorthEntries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    return sorted.map(entry => ({
+      month: getMonthKey(entry.date),
+      assets_total: entry.assets,
+      liabilities_total: entry.liabilities,
+      net_worth: entry.assets - entry.liabilities
+    }))
+  }, [netWorthEntries])
+
+  const addEntry = async () => {
+    if (!date || !assets) return
 
     const assetsNum = parseFloat(assets)
     const liabilitiesNum = parseFloat(liabilities) || 0
-    const netWorth = assetsNum - liabilitiesNum
-
-    const newEntry: NetWorthData = {
-      month,
-      assets_total: assetsNum,
-      liabilities_total: liabilitiesNum,
-      net_worth: netWorth,
+    try {
+      await addNetWorthEntry({ date, assets: assetsNum, liabilities: liabilitiesNum })
+      setDate('')
+      setAssets('')
+      setLiabilities('')
+    } catch (err) {
+      console.error('Error saving net worth entry', err)
     }
-
-    setData([...data, newEntry])
-    setMonth('')
-    setAssets('')
-    setLiabilities('')
   }
 
-  const currentNetWorth = data[data.length - 1].net_worth
-  const startNetWorth = data[0].net_worth
+  const latest = data[data.length - 1]
+  const first = data[0]
+  const currentNetWorth = latest ? latest.net_worth : 0
+  const startNetWorth = first ? first.net_worth : 0
   const growth = currentNetWorth - startNetWorth
-  const growthPercent = ((growth / startNetWorth) * 100).toFixed(2)
+  const growthPercent = startNetWorth ? ((growth / startNetWorth) * 100).toFixed(2) : '0.00'
+
+  if (loading) return <div className="tool-container"><p>Loading net worth...</p></div>
+  if (error) return <div className="tool-container"><p className="error">{error}</p></div>
 
   return (
     <div className="tool-container">
@@ -64,11 +62,11 @@ export default function NetWorthOverTime() {
         </div>
         <div className="stat-card">
           <div className="stat-label">Total Assets</div>
-          <div className="stat-value">${data[data.length - 1].assets_total.toLocaleString()}</div>
+          <div className="stat-value">${latest ? latest.assets_total.toLocaleString() : 0}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Total Liabilities</div>
-          <div className="stat-value">${data[data.length - 1].liabilities_total.toLocaleString()}</div>
+          <div className="stat-value">${latest ? latest.liabilities_total.toLocaleString() : 0}</div>
         </div>
       </div>
 
@@ -92,10 +90,10 @@ export default function NetWorthOverTime() {
         <h3>Add Entry</h3>
         <div className="form-group">
           <input
-            type="text"
-            placeholder="Month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
+            type="date"
+            placeholder="Date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
           />
           <input
             type="number"

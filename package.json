@@ -4,15 +4,24 @@
   "version": "0.0.0",
   "type": "module",
   "main": "src/electron/main.js",
+
   "scripts": {
     "dev:react": "vite",
     "dev:electron": "electron .",
+    "dev": "concurrently -k \"npm:dev:react\" \"npm:dev:electron\"",
+
     "build": "tsc -b && vite build",
+
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+
     "lint": "eslint .",
     "preview": "vite preview"
   },
+
   "dependencies": {
     "better-sqlite3": "^12.6.2",
+    "esbuild-register": "^3.6.0",
     "lucide-react": "^0.563.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -21,13 +30,19 @@
     "sqlite3": "^5.1.7",
     "uuid": "^13.0.0"
   },
+
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+
     "electron": "^40.0.0",
+    "electron-builder": "^26.4.0",
+
+    "concurrently": "^9.1.2",
+
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
@@ -36,7 +51,29 @@
     "typescript-eslint": "^8.46.4",
     "vite": "npm:rolldown-vite@7.2.5"
   },
+
   "overrides": {
     "vite": "npm:rolldown-vite@7.2.5"
+  },
+
+  "build": {
+    "appId": "com.osama.finance",
+    "productName": "Finance",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "src/electron/**",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

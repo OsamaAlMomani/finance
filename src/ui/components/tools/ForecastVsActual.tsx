@@ -1,22 +1,9 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, Bar, Line } from 'recharts'
-
-interface ForecastData {
-  month: string
-  forecast_income: number
-  forecast_expense: number
-  actual_income?: number
-  actual_expense?: number
-}
+import { useForecasts } from '../../hooks/useFinanceData'
 
 export default function ForecastVsActual() {
-  const [data, setData] = useState<ForecastData[]>([
-    { month: 'Jan', forecast_income: 5000, forecast_expense: 3000, actual_income: 5200, actual_expense: 3100 },
-    { month: 'Feb', forecast_income: 5000, forecast_expense: 3000, actual_income: 4800, actual_expense: 3300 },
-    { month: 'Mar', forecast_income: 5200, forecast_expense: 3200, actual_income: 5000, actual_expense: 3500 },
-    { month: 'Apr', forecast_income: 5200, forecast_expense: 3200, actual_income: undefined, actual_expense: undefined },
-    { month: 'May', forecast_income: 5300, forecast_expense: 3300, actual_income: undefined, actual_expense: undefined },
-  ])
+  const { forecasts, loading, error, updateForecast } = useForecasts()
 
   const [selectedMonth, setSelectedMonth] = useState<string>('')
   const [forecastIncome, setForecastIncome] = useState('')
@@ -24,26 +11,31 @@ export default function ForecastVsActual() {
   const [actualIncome, setActualIncome] = useState('')
   const [actualExpense, setActualExpense] = useState('')
 
-  const updateEntry = () => {
+  const data = useMemo(() => [...forecasts].sort((a, b) => a.month.localeCompare(b.month)), [forecasts])
+
+  const updateEntry = async () => {
     if (!selectedMonth) return
 
     const month = data.find(d => d.month === selectedMonth)
     if (!month) return
 
-    const updated = {
-      ...month,
+    const updates = {
       forecast_income: forecastIncome ? parseFloat(forecastIncome) : month.forecast_income,
       forecast_expense: forecastExpense ? parseFloat(forecastExpense) : month.forecast_expense,
       actual_income: actualIncome ? parseFloat(actualIncome) : month.actual_income,
       actual_expense: actualExpense ? parseFloat(actualExpense) : month.actual_expense,
     }
 
-    setData(data.map(d => d.month === selectedMonth ? updated : d))
-    setSelectedMonth('')
-    setForecastIncome('')
-    setForecastExpense('')
-    setActualIncome('')
-    setActualExpense('')
+    try {
+      await updateForecast(month.id, updates)
+      setSelectedMonth('')
+      setForecastIncome('')
+      setForecastExpense('')
+      setActualIncome('')
+      setActualExpense('')
+    } catch (err) {
+      console.error('Error updating forecast', err)
+    }
   }
 
   // Calculate variance for completed months
@@ -63,6 +55,9 @@ export default function ForecastVsActual() {
     actual_income: d.actual_income || null,
     actual_expense: d.actual_expense || null,
   }))
+
+  if (loading) return <div className="tool-container"><p>Loading forecasts...</p></div>
+  if (error) return <div className="tool-container"><p className="error">{error}</p></div>
 
   return (
     <div className="tool-container">

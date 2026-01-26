@@ -1,46 +1,31 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-
-interface SavingsData {
-  month: string
-  net: number
-  cumulative_savings: number
-}
+import { useTransactions } from '../../hooks/useFinanceData'
+import { aggregateTransactionsByMonth } from '../../../utils/dataAggregation'
 
 export default function CumulativeSavings() {
-  const [data, setData] = useState<SavingsData[]>([
-    { month: 'Jan', net: 2000, cumulative_savings: 2000 },
-    { month: 'Feb', net: 2200, cumulative_savings: 4200 },
-    { month: 'Mar', net: 1800, cumulative_savings: 6000 },
-    { month: 'Apr', net: 2500, cumulative_savings: 8500 },
-    { month: 'May', net: 1900, cumulative_savings: 10400 },
-    { month: 'Jun', net: 2300, cumulative_savings: 12700 },
-  ])
+  const { transactions, loading, error } = useTransactions()
+  const [manualStart, setManualStart] = useState<number | ''>('')
 
-  const [monthInput, setMonthInput] = useState('')
-  const [netInput, setNetInput] = useState('')
+  const data = useMemo(() => {
+    const monthly = aggregateTransactionsByMonth(transactions)
+    let cumulative = typeof manualStart === 'number' ? manualStart : 0
+    return monthly.map(m => {
+      cumulative += m.net
+      return {
+        month: m.month,
+        net: m.net,
+        cumulative_savings: cumulative
+      }
+    })
+  }, [transactions, manualStart])
 
-  const addEntry = () => {
-    if (!monthInput || !netInput) return
+  const totalSavings = data.length ? data[data.length - 1].cumulative_savings : 0
+  const averageMonthlySavings = data.length ? (totalSavings / data.length).toFixed(2) : '0'
+  const maxMonth = data.length ? data.reduce((max, d) => d.net > max.net ? d : max) : { net: 0, month: '-' }
 
-    const netNum = parseFloat(netInput)
-    const prevCumulative = data.length > 0 ? data[data.length - 1].cumulative_savings : 0
-    const newCumulative = prevCumulative + netNum
-
-    const newEntry: SavingsData = {
-      month: monthInput,
-      net: netNum,
-      cumulative_savings: newCumulative,
-    }
-
-    setData([...data, newEntry])
-    setMonthInput('')
-    setNetInput('')
-  }
-
-  const totalSavings = data[data.length - 1].cumulative_savings
-  const averageMonthlySavings = (totalSavings / data.length).toFixed(2)
-  const maxMonth = data.reduce((max, d) => d.net > max.net ? d : max)
+  if (loading) return <div className="tool-container"><p>Loading savings...</p></div>
+  if (error) return <div className="tool-container"><p className="error">{error}</p></div>
 
   return (
     <div className="tool-container">
@@ -86,21 +71,14 @@ export default function CumulativeSavings() {
       </div>
 
       <div className="input-section">
-        <h3>Add Monthly Entry</h3>
+        <h3>Starting Balance (optional)</h3>
         <div className="form-group">
           <input
-            type="text"
-            placeholder="Month"
-            value={monthInput}
-            onChange={(e) => setMonthInput(e.target.value)}
-          />
-          <input
             type="number"
-            placeholder="Net (Income - Expenses)"
-            value={netInput}
-            onChange={(e) => setNetInput(e.target.value)}
+            placeholder="Starting savings"
+            value={manualStart === '' ? '' : manualStart}
+            onChange={(e) => setManualStart(e.target.value === '' ? '' : parseFloat(e.target.value))}
           />
-          <button onClick={addEntry}>Add Entry</button>
         </div>
       </div>
 

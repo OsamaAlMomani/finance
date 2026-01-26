@@ -1,27 +1,12 @@
 import { useTransactions } from '../hooks/useFinanceData'
-import { TrendingDown, TrendingUp, AlertCircle, Plus } from 'lucide-react'
+import { TrendingDown, TrendingUp, AlertCircle } from 'lucide-react'
 import '../styles/Overview.css'
+
+const formatAmount = (value: number) => Math.round(value * 100) / 100
 
 export default function Overview() {
   const { transactions, loading } = useTransactions()
 
-  // Calculate metrics
-  const currentMonth = new Date().toISOString().slice(0, 7) // YYYY-MM
-  const thisMonthTransactions = transactions.filter(
-    t => t.date.startsWith(currentMonth)
-  )
-
-  const income = thisMonthTransactions
-    .filter(t => t.type === 'income')
-    .reduce((sum, t) => sum + t.amount, 0)
-
-  const expenses = thisMonthTransactions
-    .filter(t => t.type === 'expense')
-    .reduce((sum, t) => sum + Math.abs(t.amount), 0)
-
-  const net = income - expenses
-
-  // Current balance (sum of all income - all expenses)
   const totalIncome = transactions
     .filter(t => t.type === 'income')
     .reduce((sum, t) => sum + t.amount, 0)
@@ -30,162 +15,194 @@ export default function Overview() {
     .filter(t => t.type === 'expense')
     .reduce((sum, t) => sum + Math.abs(t.amount), 0)
 
-  const balance = totalIncome - totalExpenses
+  const totalNet = totalIncome - totalExpenses
 
-  // Calculate monthly burn rate
-  const last3Months = transactions.filter(t => {
-    const tDate = new Date(t.date)
-    const now = new Date()
-    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1)
-    return tDate >= threeMonthsAgo
+  const now = new Date()
+  const windowStart = new Date(now)
+  windowStart.setDate(now.getDate() - 13)
+
+  const expensesLast14 = transactions.filter(t => {
+    if (t.type !== 'expense') return false
+    const date = new Date(t.date)
+    return !Number.isNaN(date.getTime()) && date >= windowStart && date <= now
   })
 
-  const monthlyExpenses: { [key: string]: number } = {}
-  last3Months.forEach(t => {
-    if (t.type === 'expense') {
-      const monthKey = t.date.slice(0, 7)
-      monthlyExpenses[monthKey] = (monthlyExpenses[monthKey] || 0) + Math.abs(t.amount)
+  const dailyTotals: Record<string, number> = {}
+  expensesLast14.forEach(t => {
+    const key = t.date.slice(0, 10)
+    dailyTotals[key] = (dailyTotals[key] || 0) + Math.abs(t.amount)
+  })
+
+  const totalDailyFees = expensesLast14.reduce((sum, t) => sum + Math.abs(t.amount), 0)
+  const avgPerDay = totalDailyFees / 14
+
+  const worstDayEntry = Object.entries(dailyTotals).sort((a, b) => b[1] - a[1])[0]
+
+  const last7Days = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(now)
+    date.setDate(now.getDate() - index)
+    const key = date.toISOString().split('T')[0]
+    return {
+      date: key,
+      amount: dailyTotals[key] || 0
     }
   })
 
-  const avgMonthlyExpense = Object.values(monthlyExpenses).length > 0
-    ? Object.values(monthlyExpenses).reduce((a, b) => a + b, 0) / Object.values(monthlyExpenses).length
+  const monthsToAnalyze = 6
+  const monthKeys = Array.from({ length: monthsToAnalyze }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - index, 1)
+    return date.toISOString().slice(0, 7)
+  })
+
+  const monthlyTotals = monthKeys.reduce((acc, key) => {
+    acc[key] = { income: 0, expense: 0, count: 0 }
+    return acc
+  }, {} as Record<string, { income: number; expense: number; count: number }>)
+
+  transactions.forEach(t => {
+    const monthKey = t.date.slice(0, 7)
+    if (!monthlyTotals[monthKey]) return
+    monthlyTotals[monthKey].count += 1
+    if (t.type === 'income') {
+      monthlyTotals[monthKey].income += t.amount
+    } else {
+      monthlyTotals[monthKey].expense += Math.abs(t.amount)
+    }
+  })
+
+  const monthlyNetValues = monthKeys
+    .filter(key => monthlyTotals[key].count > 0)
+    .map(key => monthlyTotals[key].income - monthlyTotals[key].expense)
+
+  const avgMonthlyNet = monthlyNetValues.length > 0
+    ? monthlyNetValues.reduce((sum, value) => sum + value, 0) / monthlyNetValues.length
     : 0
 
-  const runway = avgMonthlyExpense > 0 ? Math.round(balance / avgMonthlyExpense * 10) / 10 : Infinity
+  const projection3 = totalNet + avgMonthlyNet * 3
+  const projection6 = totalNet + avgMonthlyNet * 6
+  const projection12 = totalNet + avgMonthlyNet * 12
 
-  // Top spending category
-  const categoryExpenses: { [key: string]: number } = {}
-  thisMonthTransactions
-    .filter(t => t.type === 'expense')
-    .forEach(t => {
-      const category = t.category || 'Uncategorized'
-      categoryExpenses[category] = (categoryExpenses[category] || 0) + Math.abs(t.amount)
-    })
-
-  const topCategory = Object.entries(categoryExpenses).sort((a, b) => b[1] - a[1])[0]
+  const openQuickAdd = (type: 'income' | 'expense') => {
+    window.dispatchEvent(
+      new CustomEvent('finance:quickAdd', { detail: { type } })
+    )
+  }
 
   return (
     <div className="overview">
       <h1>Overview</h1>
-      
+
       {loading ? (
         <div className="loading">Loading...</div>
       ) : (
         <>
-          {/* KPI Cards */}
-          <div className="kpi-grid">
-            {/* Balance Card */}
-            <div className="kpi-card balance-card">
-              <div className="kpi-header">
-                <h3>Current Balance</h3>
+          <div className="totals-strip">
+            <div className="total-card income-card">
+              <div className="total-label">Total Income</div>
+              <div className="total-value">+{formatAmount(totalIncome)} JOD</div>
+            </div>
+            <div className="total-card expense-card">
+              <div className="total-label">Total Expenses</div>
+              <div className="total-value">−{formatAmount(totalExpenses)} JOD</div>
+            </div>
+            <div className="total-card net-card">
+              <div className="total-label">Total Savings / Net</div>
+              <div className={`total-value ${totalNet >= 0 ? 'positive' : 'negative'}`}>
+                {totalNet >= 0 ? '+' : '−'}{formatAmount(Math.abs(totalNet))} JOD
               </div>
-              <div className="kpi-value">
-                {Math.round(balance * 100) / 100} JOD
+            </div>
+          </div>
+
+          <div className="command-grid">
+            <div className="panel-card actions-card">
+              <h2>Quick Actions</h2>
+              <div className="action-buttons">
+                <button
+                  className="action-btn income-btn"
+                  onClick={() => openQuickAdd('income')}
+                >
+                  <TrendingUp size={20} />
+                  <span>Add Income</span>
+                </button>
+                <button
+                  className="action-btn expense-btn"
+                  onClick={() => openQuickAdd('expense')}
+                >
+                  <TrendingDown size={20} />
+                  <span>Add Expense</span>
+                </button>
               </div>
-              <div className="kpi-label">Total account balance</div>
+              <div className="actions-hint">
+                One-click add now opens the modal with the correct type selected.
+              </div>
             </div>
 
-            {/* This Month Card */}
-            <div className="kpi-card month-card">
-              <div className="kpi-header">
-                <h3>This Month</h3>
-              </div>
-              <div className="kpi-breakdown">
-                <div className="breakdown-item income">
-                  <span className="label">Income</span>
-                  <span className="value">+{Math.round(income * 100) / 100}</span>
+            <div className="panel-card daily-fees-card">
+              <h2>Daily Fees (Last 14 Days)</h2>
+              {expensesLast14.length === 0 ? (
+                <div className="empty-state">
+                  <AlertCircle size={32} />
+                  <h3>No expenses recorded</h3>
+                  <p>Start tracking daily fees to see your trends here.</p>
                 </div>
-                <div className="breakdown-item expense">
-                  <span className="label">Expenses</span>
-                  <span className="value">−{Math.round(expenses * 100) / 100}</span>
+              ) : (
+                <>
+                  <div className="daily-summary">
+                    <div className="summary-item">
+                      <span className="label">Total</span>
+                      <span className="value">{formatAmount(totalDailyFees)} JOD</span>
+                    </div>
+                    <div className="summary-item">
+                      <span className="label">Avg / Day</span>
+                      <span className="value">{formatAmount(avgPerDay)} JOD</span>
+                    </div>
+                    <div className="summary-item">
+                      <span className="label">Worst Day</span>
+                      <span className="value">
+                        {worstDayEntry ? `${worstDayEntry[0]} — ${formatAmount(worstDayEntry[1])} JOD` : '—'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="daily-list">
+                    {last7Days.map(day => (
+                      <div key={day.date} className="daily-item">
+                        <span className="daily-date">{day.date}</span>
+                        <span className={`daily-amount ${day.amount > 0 ? 'negative' : ''}`}>
+                          {day.amount > 0 ? `−${formatAmount(day.amount)}` : '0'} JOD
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="panel-card projection-card">
+              <h2>Future Snapshot</h2>
+              <div className="projection-grid">
+                <div className="projection-item">
+                  <span className="label">3 Months</span>
+                  <span className={`value ${projection3 >= 0 ? 'positive' : 'negative'}`}>
+                    {projection3 >= 0 ? '+' : '−'}{formatAmount(Math.abs(projection3))} JOD
+                  </span>
                 </div>
-                <div className="breakdown-item net">
-                  <span className="label">Net</span>
-                  <span className={`value ${net >= 0 ? 'positive' : 'negative'}`}>
-                    {net >= 0 ? '+' : '−'}{Math.round(Math.abs(net) * 100) / 100}
+                <div className="projection-item">
+                  <span className="label">6 Months</span>
+                  <span className={`value ${projection6 >= 0 ? 'positive' : 'negative'}`}>
+                    {projection6 >= 0 ? '+' : '−'}{formatAmount(Math.abs(projection6))} JOD
+                  </span>
+                </div>
+                <div className="projection-item">
+                  <span className="label">12 Months</span>
+                  <span className={`value ${projection12 >= 0 ? 'positive' : 'negative'}`}>
+                    {projection12 >= 0 ? '+' : '−'}{formatAmount(Math.abs(projection12))} JOD
                   </span>
                 </div>
               </div>
-            </div>
-
-            {/* Runway Card */}
-            <div className="kpi-card runway-card">
-              <div className="kpi-header">
-                <h3>Runway</h3>
-              </div>
-              <div className="kpi-value">
-                {isFinite(runway) ? `${runway} months` : '∞'}
-              </div>
-              <div className="kpi-label">
-                Based on {Math.round(avgMonthlyExpense * 100) / 100} JOD avg/month
-              </div>
-              <div className={`runway-status ${runway < 3 ? 'critical' : runway < 6 ? 'warning' : 'safe'}`}>
-                {runway < 3 ? '🚨 Critical' : runway < 6 ? '⚠️ Warning' : '✓ Safe'}
+              <div className="projection-meta">
+                Average monthly net (last {monthsToAnalyze} months): {formatAmount(avgMonthlyNet)} JOD
               </div>
             </div>
-
-            {/* Top Category */}
-            <div className="kpi-card category-card">
-              <div className="kpi-header">
-                <h3>Top Category</h3>
-              </div>
-              {topCategory ? (
-                <>
-                  <div className="kpi-value">{topCategory[0]}</div>
-                  <div className="kpi-label">
-                    {Math.round(topCategory[1] * 100) / 100} JOD this month
-                  </div>
-                </>
-              ) : (
-                <div className="kpi-label">No expenses yet</div>
-              )}
-            </div>
-          </div>
-
-          {/* Quick Actions */}
-          <div className="quick-actions">
-            <h2>Quick Actions</h2>
-            <div className="action-buttons">
-              <button className="action-btn income-btn">
-                <TrendingUp size={20} />
-                <span>Add Income</span>
-              </button>
-              <button className="action-btn expense-btn">
-                <TrendingDown size={20} />
-                <span>Add Expense</span>
-              </button>
-              <button className="action-btn plan-btn">
-                <Plus size={20} />
-                <span>Add Plan Item</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Recent Transactions */}
-          <div className="recent-section">
-            <h2>Recent Transactions</h2>
-            {transactions.length === 0 ? (
-              <div className="empty-state">
-                <AlertCircle size={48} />
-                <h3>No transactions yet</h3>
-                <p>Start by adding your first income or expense</p>
-              </div>
-            ) : (
-              <div className="recent-list">
-                {transactions.slice(0, 10).map(t => (
-                  <div key={t.id} className="recent-item">
-                    <div className="recent-info">
-                      <div className="recent-desc">{t.description}</div>
-                      <div className="recent-date">{t.date}</div>
-                    </div>
-                    <div className={`recent-amount ${t.type}`}>
-                      {t.type === 'income' ? '+' : '−'}{Math.round(t.amount * 100) / 100}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </>
       )}
