@@ -1,39 +1,57 @@
+import { useState, useEffect, useCallback } from 'react'
 import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
-import Dashboard from './components/Dashboard'
-import Overview from './sections/Overview'
-import Transactions from './sections/Transactions'
-import Calendar from './sections/Calendar'
-import Forecast from './sections/Forecast'
-import Risk from './sections/Risk'
-import Budgets from './sections/Budgets'
-import Savings from './sections/Savings'
-import SavingsEdit from './sections/SavingsEdit'
-import Tax from './sections/Tax'
+import Overview from './sections/OverviewEnhanced'
+import Timeline from './sections/Timeline'
+import Plan from './sections/Plan'
+import Insights from './sections/Insights'
 import Settings from './sections/Settings'
+import { ToastContainer } from './components/common/Toast'
+import { KeyboardShortcutsHelp } from './components/common/KeyboardShortcutsHelp'
+import { CommandPalette } from './components/common'
+import { initAnalytics, trackEvent } from './services/analytics'
 import './App.css'
 
 function App() {
   const Router = window.location.protocol === 'file:' ? HashRouter : BrowserRouter
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+
+  // Global Ctrl+K handler for command palette
+  const handleGlobalKeyDown = useCallback((e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault()
+      setCommandPaletteOpen(prev => !prev)
+    }
+  }, [])
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [handleGlobalKeyDown])
+
+  useEffect(() => {
+    initAnalytics()
+    void trackEvent('app_opened')
+  }, [])
 
   return (
     <Router>
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Overview />} />
-          <Route path="/tools" element={<Dashboard />} />
-          <Route path="/transactions" element={<Transactions />} />
-          <Route path="/calendar" element={<Calendar />} />
-          <Route path="/forecast" element={<Forecast />} />
-          <Route path="/risk" element={<Risk />} />
-          <Route path="/budgets" element={<Budgets />} />
-          <Route path="/savings" element={<Savings />} />
-          <Route path="/savings/edit" element={<SavingsEdit />} />
-          <Route path="/tax" element={<Tax />} />
+          <Route path="/timeline" element={<Timeline />} />
+          <Route path="/plan" element={<Plan />} />
+          <Route path="/insights" element={<Insights />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
+      <ToastContainer position="top-right" />
+      <KeyboardShortcutsHelp />
+      <CommandPalette 
+        isOpen={commandPaletteOpen} 
+        onClose={() => setCommandPaletteOpen(false)} 
+      />
     </Router>
   )
 }

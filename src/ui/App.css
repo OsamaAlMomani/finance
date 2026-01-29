@@ -1,3 +1,8 @@
+/* Import Design System */
+@import './styles/design-system/variables.css';
+@import './styles/design-system/animations.css';
+@import './styles/design-system/utilities.css';
+
 :root {
   --bg-primary: #0f1419;
   --bg-secondary: #1a1f26;
