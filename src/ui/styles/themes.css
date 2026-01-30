@@ -1,0 +1,170 @@
+/* Global Theme Styles - 7 ChronoLine Themes */
+
+:root {
+  /* Default Theme */
+  --primary: #4f46e5;
+  --primary-dark: #4338ca;
+  --secondary: #7c3aed;
+  --accent: #06b6d4;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --bg-card: rgba(30, 41, 59, 0.8);
+  
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  
+  --border: rgba(148, 163, 184, 0.2);
+  --border-light: rgba(148, 163, 184, 0.1);
+  
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  
+  --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.1);
+  
+  --transition: all 0.3s ease;
+  --transition-fast: all 0.15s ease;
+  --card-bg: rgba(30, 41, 59, 0.8);
+  --light-gray: rgba(148, 163, 184, 0.1);
+  --app-bg: #0f172a;
+}
+
+/* Theme 1: Default - Indigo */
+body.theme-1 {
+  --primary: #4f46e5;
+  --primary-dark: #4338ca;
+  --secondary: #7c3aed;
+  --accent: #06b6d4;
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --bg-card: rgba(30, 41, 59, 0.8);
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --border: rgba(148, 163, 184, 0.2);
+  --border-light: rgba(148, 163, 184, 0.1);
+  --app-bg: #0f172a;
+}
+
+/* Theme 2: Purple */
+body.theme-2 {
+  --primary: #8b5cf6;
+  --primary-dark: #7c3aed;
+  --secondary: #a78bfa;
+  --accent: #c4b5fd;
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --bg-card: rgba(30, 41, 59, 0.8);
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --border: rgba(148, 163, 184, 0.2);
+  --border-light: rgba(148, 163, 184, 0.1);
+  --app-bg: #0f172a;
+}
+
+/* Theme 3: Green */
+body.theme-3 {
+  --primary: #10b981;
+  --primary-dark: #059669;
+  --secondary: #34d399;
+  --accent: #6ee7b7;
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --bg-card: rgba(30, 41, 59, 0.8);
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --border: rgba(148, 163, 184, 0.2);
+  --border-light: rgba(148, 163, 184, 0.1);
+  --app-bg: #0f172a;
+}
+
+/* Theme 4: Orange */
+body.theme-4 {
+  --primary: #f59e0b;
+  --primary-dark: #d97706;
+  --secondary: #fbbf24;
+  --accent: #fcd34d;
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --bg-card: rgba(30, 41, 59, 0.8);
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --border: rgba(148, 163, 184, 0.2);
+  --border-light: rgba(148, 163, 184, 0.1);
+  --app-bg: #0f172a;
+}
+
+/* Theme 5: Pink */
+body.theme-5 {
+  --primary: #ec4899;
+  --primary-dark: #db2777;
+  --secondary: #f472b6;
+  --accent: #f9a8d4;
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --bg-card: rgba(30, 41, 59, 0.8);
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --border: rgba(148, 163, 184, 0.2);
+  --border-light: rgba(148, 163, 184, 0.1);
+  --app-bg: #0f172a;
+}
+
+/* Theme 6: Dark */
+body.theme-6 {
+  --primary: #4f46e5;
+  --primary-dark: #4338ca;
+  --secondary: #7c3aed;
+  --accent: #06b6d4;
+  --bg-primary: #111827;
+  --bg-secondary: #1f2937;
+  --bg-tertiary: #374151;
+  --bg-card: rgba(31, 41, 55, 0.9);
+  --text-primary: #f9fafb;
+  --text-secondary: #e5e7eb;
+  --text-muted: #9ca3af;
+  --border: rgba(107, 114, 128, 0.2);
+  --border-light: rgba(107, 114, 128, 0.1);
+  --app-bg: #111827;
+}
+
+/* Theme 7: Light */
+body.theme-7 {
+  --primary: #4f46e5;
+  --primary-dark: #4338ca;
+  --secondary: #7c3aed;
+  --accent: #06b6d4;
+  --bg-primary: #f8fafc;
+  --bg-secondary: #f1f5f9;
+  --bg-tertiary: #e2e8f0;
+  --bg-card: rgba(255, 255, 255, 0.9);
+  --text-primary: #1e293b;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --border: rgba(100, 116, 139, 0.2);
+  --border-light: rgba(100, 116, 139, 0.1);
+  --app-bg: #f8fafc;
+}
+
+body {
+  transition: background-color 0.3s ease, color 0.3s ease;
+  background-color: var(--app-bg);
+  color: var(--text-primary);
+}

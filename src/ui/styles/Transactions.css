@@ -6,7 +6,7 @@
 .transactions-page h1 {
   font-size: 28px;
   margin: 0 0 24px 0;
-  color: var(--text-primary, #e0e0e0);
+  color: var(--text-primary, #1f2a37);
 }
 
 /* ============ FILTERS BAR ============ */
@@ -23,10 +23,10 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background-color: var(--bg-secondary, #1a1f26);
-  border: 1px solid var(--border-color, #2a3038);
+  background-color: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--border-color, rgba(56, 189, 248, 0.25));
   border-radius: 8px;
-  color: var(--text-primary, #e0e0e0);
+  color: var(--text-primary, #1f2a37);
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
@@ -34,8 +34,8 @@
 }
 
 .filter-toggle-btn:hover {
-  background-color: rgba(0, 212, 255, 0.1);
-  border-color: var(--accent-color, #00d4ff);
+  background-color: var(--accent-12, rgba(56, 189, 248, 0.12));
+  border-color: var(--accent-color, #38bdf8);
 }
 
 .filter-presets {
@@ -47,18 +47,18 @@
 .preset-btn {
   padding: 8px 12px;
   background-color: transparent;
-  border: 1px solid var(--border-color, #2a3038);
+  border: 1px solid var(--border-color, rgba(56, 189, 248, 0.25));
   border-radius: 6px;
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--text-secondary, #4b5563);
   cursor: pointer;
   font-size: 13px;
   transition: all 0.2s;
 }
 
 .preset-btn:hover {
-  background-color: rgba(0, 212, 255, 0.1);
-  border-color: var(--accent-color, #00d4ff);
-  color: var(--accent-color, #00d4ff);
+  background-color: var(--accent-12, rgba(56, 189, 248, 0.12));
+  border-color: var(--accent-color, #38bdf8);
+  color: var(--accent-color, #38bdf8);
 }
 
 .preset-btn.clear {
@@ -76,16 +76,16 @@
 
 .filter-summary span {
   padding: 4px 8px;
-  background-color: rgba(0, 212, 255, 0.15);
+  background-color: var(--accent-15, rgba(56, 189, 248, 0.15));
   border-radius: 4px;
   font-size: 12px;
-  color: var(--accent-color, #00d4ff);
+  color: var(--accent-color, #38bdf8);
 }
 
 /* ============ EXPANDED FILTERS ============ */
 .filters-expanded {
-  background-color: var(--bg-secondary, #1a1f26);
-  border: 1px solid var(--border-color, #2a3038);
+  background-color: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--border-color, rgba(56, 189, 248, 0.25));
   border-radius: 8px;
   padding: 16px;
   margin-bottom: 20px;
@@ -107,35 +107,35 @@
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--text-secondary, #4b5563);
   margin-bottom: 6px;
 }
 
 .filter-group input,
 .filter-group select {
   padding: 8px 10px;
-  background-color: var(--bg-primary, #0f1419);
-  border: 1px solid var(--border-color, #2a3038);
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--border-color, rgba(56, 189, 248, 0.25));
   border-radius: 6px;
-  color: var(--text-primary, #e0e0e0);
+  color: var(--text-primary, #1f2a37);
   font-size: 13px;
 }
 
 .filter-group input::placeholder {
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--text-secondary, #4b5563);
 }
 
 .filter-group input:focus,
 .filter-group select:focus {
   outline: none;
-  border-color: var(--accent-color, #00d4ff);
-  box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.1);
+  border-color: var(--accent-color, #38bdf8);
+  box-shadow: 0 0 0 2px var(--focus-ring, rgba(56, 189, 248, 0.15));
 }
 
 .close-filters-btn {
   padding: 8px 16px;
-  background-color: var(--accent-color, #00d4ff);
-  color: var(--bg-primary, #0f1419);
+  background-color: var(--accent-color, #38bdf8);
+  color: #ffffff;
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -145,20 +145,20 @@
 }
 
 .close-filters-btn:hover {
-  background-color: #00b8d4;
+  background-color: var(--accent-hover, #1fa1dc);
 }
 
 /* ============ TRANSACTIONS LIST ============ */
 .loading {
   text-align: center;
   padding: 40px;
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--text-secondary, #4b5563);
 }
 
 .empty-state {
   text-align: center;
   padding: 60px 20px;
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--text-secondary, #4b5563);
 }
 
 .empty-state svg {
@@ -169,7 +169,7 @@
 .empty-state h3 {
   margin: 12px 0 8px 0;
   font-size: 18px;
-  color: var(--text-primary, #e0e0e0);
+  color: var(--text-primary, #1f2a37);
 }
 
 .empty-state p {
@@ -178,8 +178,8 @@
 }
 
 .transactions-list {
-  background-color: var(--bg-secondary, #1a1f26);
-  border: 1px solid var(--border-color, #2a3038);
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--border-color, rgba(56, 189, 248, 0.25));
   border-radius: 12px;
   overflow: hidden;
 }
@@ -189,12 +189,12 @@
   grid-template-columns: 100px 1fr 120px 100px 100px;
   gap: 12px;
   padding: 16px;
-  background-color: rgba(0, 212, 255, 0.05);
-  border-bottom: 1px solid var(--border-color, #2a3038);
+  background-color: var(--accent-08, rgba(56, 189, 248, 0.08));
+  border-bottom: 1px solid var(--border-color, rgba(56, 189, 248, 0.25));
   font-weight: 600;
   font-size: 12px;
   text-transform: uppercase;
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--text-secondary, #4b5563);
 }
 
 .list-row {
@@ -202,13 +202,13 @@
   grid-template-columns: 100px 1fr 120px 100px 100px;
   gap: 12px;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color, #2a3038);
+  border-bottom: 1px solid var(--accent-20, rgba(56, 189, 248, 0.2));
   align-items: center;
   transition: background-color 0.2s;
 }
 
 .list-row:hover {
-  background-color: rgba(0, 212, 255, 0.05);
+  background-color: var(--accent-08, rgba(56, 189, 248, 0.08));
 }
 
 .list-row:last-child {
@@ -224,16 +224,16 @@
 }
 
 .col-date {
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--text-secondary, #4b5563);
 }
 
 .col-desc {
-  color: var(--text-primary, #e0e0e0);
+  color: var(--text-primary, #1f2a37);
   font-weight: 500;
 }
 
 .col-category {
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--text-secondary, #4b5563);
 }
 
 .col-amount {
@@ -257,16 +257,16 @@
 /* Edit inputs */
 .edit-input {
   padding: 6px 8px;
-  background-color: var(--bg-primary, #0f1419);
-  border: 1px solid var(--accent-color, #00d4ff);
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--accent-color, #38bdf8);
   border-radius: 4px;
-  color: var(--text-primary, #e0e0e0);
+  color: var(--text-primary, #1f2a37);
   font-size: 12px;
 }
 
 .edit-input:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.2);
+  box-shadow: 0 0 0 2px var(--focus-ring-strong, rgba(56, 189, 248, 0.2));
 }
 
 /* Action buttons */
@@ -276,21 +276,21 @@
   justify-content: center;
   padding: 6px 8px;
   background-color: transparent;
-  border: 1px solid var(--border-color, #2a3038);
+  border: 1px solid var(--border-color, rgba(56, 189, 248, 0.25));
   border-radius: 4px;
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--text-secondary, #4b5563);
   cursor: pointer;
   transition: all 0.2s;
   font-size: 12px;
 }
 
 .action-btn:hover {
-  background-color: rgba(0, 212, 255, 0.1);
-  border-color: var(--accent-color, #00d4ff);
+  background-color: var(--accent-12, rgba(56, 189, 248, 0.12));
+  border-color: var(--accent-color, #38bdf8);
 }
 
 .action-btn.edit {
-  color: var(--accent-color, #00d4ff);
+  color: var(--accent-color, #38bdf8);
 }
 
 .action-btn.delete:hover {
@@ -300,13 +300,13 @@
 }
 
 .action-btn.save {
-  background-color: #00ff88;
+  background-color: #34d399;
   border: none;
-  color: #0f1419;
+  color: #ffffff;
 }
 
 .action-btn.save:hover {
-  background-color: #00dd77;
+  background-color: #22c55e;
 }
 
 .action-btn.cancel {

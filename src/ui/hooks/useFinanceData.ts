@@ -6,7 +6,10 @@ import type {
   IncomeSource,
   Forecast,
   CalendarEvent,
-  TransactionFilter
+  TransactionFilter,
+  Budget,
+  Bill,
+  Goal
 } from '../../services/database'
 
 // Lightweight demo data so UI is populated when IPC/database are unavailable
@@ -42,6 +45,24 @@ const DEMO_FORECASTS: Forecast[] = [
 const DEMO_EVENTS: CalendarEvent[] = [
   { id: 'c1', date: '2026-01-02', description: 'Rent due', amount: -900, type: 'expense', recurring: 'monthly', createdAt: '', updatedAt: '' },
   { id: 'c2', date: '2026-01-15', description: 'Salary payday', amount: 3200, type: 'income', recurring: 'monthly', createdAt: '', updatedAt: '' }
+]
+
+const DEMO_BUDGETS: Budget[] = [
+  { id: 'b1', name: 'Groceries', category: 'Food', period: 'monthly', limitAmount: 400, description: 'Monthly grocery shopping', createdAt: '', updatedAt: '' },
+  { id: 'b2', name: 'Entertainment', category: 'Leisure', period: 'monthly', limitAmount: 200, description: 'Movies, games, outings', createdAt: '', updatedAt: '' },
+  { id: 'b3', name: 'Transportation', category: 'Transport', period: 'monthly', limitAmount: 150, description: 'Fuel and public transport', createdAt: '', updatedAt: '' }
+]
+
+const DEMO_BILLS: Bill[] = [
+  { id: 'bl1', name: 'Electricity', category: 'Utilities', amount: 85, nextDueDate: '2026-02-05', recurring: 'monthly', isPaid: false, description: 'Monthly electricity bill', createdAt: '', updatedAt: '' },
+  { id: 'bl2', name: 'Netflix', category: 'Entertainment', amount: 15.99, nextDueDate: '2026-02-01', recurring: 'monthly', isPaid: false, description: 'Streaming subscription', createdAt: '', updatedAt: '' },
+  { id: 'bl3', name: 'Rent', category: 'Housing', amount: 1200, nextDueDate: '2026-02-01', recurring: 'monthly', isPaid: false, description: 'Monthly rent', createdAt: '', updatedAt: '' }
+]
+
+const DEMO_GOALS: Goal[] = [
+  { id: 'g1', name: 'New Laptop', category: 'Electronics', currentAmount: 800, targetAmount: 1500, targetDate: '2026-06-01', description: 'Save for a laptop upgrade', createdAt: '', updatedAt: '' },
+  { id: 'g2', name: 'Vacation', category: 'Travel', currentAmount: 1200, targetAmount: 3000, targetDate: '2026-08-15', description: 'Summer trip', createdAt: '', updatedAt: '' },
+  { id: 'g3', name: 'Emergency Fund', category: 'Savings', currentAmount: 5000, targetAmount: 10000, targetDate: '2026-12-31', description: 'Build emergency buffer', createdAt: '', updatedAt: '' }
 ]
 
 // Get the electron ipcRenderer from window.electron (exposed by preload script)
@@ -280,6 +301,159 @@ export function useIncomeSources() {
   }, [fetchIncomeSources])
 
   return { incomeSources, loading, error, addIncomeSource, deleteIncomeSource, refetch: fetchIncomeSources }
+}
+
+// ============ BUDGETS HOOK ============
+
+export function useBudgets() {
+  const [budgets, setBudgets] = useState<Budget[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchBudgets = useCallback(async () => {
+    try {
+      setLoading(true)
+      if (!ipc) {
+        setBudgets(DEMO_BUDGETS)
+      } else {
+        const data: Budget[] = await ipc.invoke('get-budgets')
+        setBudgets((data && data.length) ? data : DEMO_BUDGETS)
+      }
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch budgets')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const addBudget = useCallback(async (budget: Omit<Budget, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const created = await ipc?.invoke('add-budget', budget)
+    setBudgets(prev => [created, ...prev])
+    return created as Budget
+  }, [])
+
+  const updateBudget = useCallback(async (id: string, updates: Partial<Budget>) => {
+    await ipc?.invoke('update-budget', id, updates)
+    setBudgets(prev => prev.map(b => (b.id === id ? { ...b, ...updates } : b)))
+  }, [])
+
+  const deleteBudget = useCallback(async (id: string) => {
+    await ipc?.invoke('delete-budget', id)
+    setBudgets(prev => prev.filter(b => b.id !== id))
+  }, [])
+
+  useEffect(() => {
+    fetchBudgets()
+    const unsubscribe = ipc?.on('budgets-updated', () => fetchBudgets())
+    return () => unsubscribe?.()
+  }, [fetchBudgets])
+
+  return { budgets, loading, error, addBudget, updateBudget, deleteBudget, refetch: fetchBudgets }
+}
+
+// ============ BILLS HOOK ============
+
+export function useBills() {
+  const [bills, setBills] = useState<Bill[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchBills = useCallback(async () => {
+    try {
+      setLoading(true)
+      if (!ipc) {
+        setBills(DEMO_BILLS)
+      } else {
+        const data: Bill[] = await ipc.invoke('get-bills')
+        setBills((data && data.length) ? data : DEMO_BILLS)
+      }
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch bills')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const addBill = useCallback(async (bill: Omit<Bill, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const created = await ipc?.invoke('add-bill', bill)
+    setBills(prev => [...prev, created].sort((a, b) => String(a.nextDueDate).localeCompare(String(b.nextDueDate))))
+    return created as Bill
+  }, [])
+
+  const updateBill = useCallback(async (id: string, updates: Partial<Bill>) => {
+    await ipc?.invoke('update-bill', id, updates)
+    setBills(prev => prev.map(b => (b.id === id ? { ...b, ...updates } : b)))
+  }, [])
+
+  const deleteBill = useCallback(async (id: string) => {
+    await ipc?.invoke('delete-bill', id)
+    setBills(prev => prev.filter(b => b.id !== id))
+  }, [])
+
+  const payBill = useCallback(async (id: string, paidDate: string) => {
+    await ipc?.invoke('pay-bill', id, paidDate)
+    // Refresh to get updated due date / paid state
+    await fetchBills()
+  }, [fetchBills])
+
+  useEffect(() => {
+    fetchBills()
+    const unsubscribe = ipc?.on('bills-updated', () => fetchBills())
+    return () => unsubscribe?.()
+  }, [fetchBills])
+
+  return { bills, loading, error, addBill, updateBill, deleteBill, payBill, refetch: fetchBills }
+}
+
+// ============ GOALS HOOK ============
+
+export function useGoals() {
+  const [goals, setGoals] = useState<Goal[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchGoals = useCallback(async () => {
+    try {
+      setLoading(true)
+      if (!ipc) {
+        setGoals(DEMO_GOALS)
+      } else {
+        const data: Goal[] = await ipc.invoke('get-goals')
+        setGoals((data && data.length) ? data : DEMO_GOALS)
+      }
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch goals')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const addGoal = useCallback(async (goal: Omit<Goal, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const created = await ipc?.invoke('add-goal', goal)
+    setGoals(prev => [created, ...prev])
+    return created as Goal
+  }, [])
+
+  const updateGoal = useCallback(async (id: string, updates: Partial<Goal>) => {
+    await ipc?.invoke('update-goal', id, updates)
+    setGoals(prev => prev.map(g => (g.id === id ? { ...g, ...updates } : g)))
+  }, [])
+
+  const deleteGoal = useCallback(async (id: string) => {
+    await ipc?.invoke('delete-goal', id)
+    setGoals(prev => prev.filter(g => g.id !== id))
+  }, [])
+
+  useEffect(() => {
+    fetchGoals()
+    const unsubscribe = ipc?.on('goals-updated', () => fetchGoals())
+    return () => unsubscribe?.()
+  }, [fetchGoals])
+
+  return { goals, loading, error, addGoal, updateGoal, deleteGoal, refetch: fetchGoals }
 }
 
 // ============ FORECASTS HOOK ============

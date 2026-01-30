@@ -1,0 +1,129 @@
+/* Notification Container */
+.notification-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 400px;
+  pointer-events: none;
+}
+
+.notification {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 
+    0 12px 40px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  animation: slideInRight 0.3s ease-out;
+  pointer-events: auto;
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.notification-success {
+  border-left: 4px solid #10b981;
+}
+
+.notification-success::before {
+  content: '✓';
+  color: #10b981;
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.notification-error {
+  border-left: 4px solid #ef4444;
+}
+
+.notification-error::before {
+  content: '✕';
+  color: #ef4444;
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.notification-warning {
+  border-left: 4px solid #f59e0b;
+}
+
+.notification-warning::before {
+  content: '⚠';
+  color: #f59e0b;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.notification-info {
+  border-left: 4px solid var(--primary);
+}
+
+.notification-info::before {
+  content: 'ℹ';
+  color: var(--primary);
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.notification-content {
+  flex: 1;
+  padding-left: 8px;
+}
+
+.notification-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.notification-message {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.notification-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.notification-close:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-secondary);
+}
+
+@media (max-width: 640px) {
+  .notification-container {
+    bottom: 12px;
+    right: 12px;
+    left: 12px;
+    max-width: none;
+  }
+}

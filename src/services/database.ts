@@ -162,6 +162,52 @@ export function initializeDatabase() {
           active INTEGER DEFAULT 1,
           createdAt TEXT DEFAULT CURRENT_TIMESTAMP
         )
+      `)
+
+      // Budgets
+      db.run(`
+        CREATE TABLE IF NOT EXISTS budgets (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          category TEXT NOT NULL,
+          period TEXT NOT NULL DEFAULT 'monthly',
+          limitAmount REAL NOT NULL,
+          description TEXT,
+          createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+      `)
+
+      // Bills & Reminders
+      db.run(`
+        CREATE TABLE IF NOT EXISTS bills (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          category TEXT NOT NULL,
+          amount REAL NOT NULL,
+          nextDueDate TEXT NOT NULL,
+          recurring TEXT DEFAULT 'monthly',
+          isPaid INTEGER DEFAULT 0,
+          lastPaidDate TEXT,
+          description TEXT,
+          createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+      `)
+
+      // Goals
+      db.run(`
+        CREATE TABLE IF NOT EXISTS goals (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          category TEXT NOT NULL,
+          currentAmount REAL NOT NULL DEFAULT 0,
+          targetAmount REAL NOT NULL,
+          targetDate TEXT,
+          description TEXT,
+          createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
+        )
       `, (err) => {
         if (err) reject(err)
         else resolve()
@@ -823,6 +869,338 @@ export function addAnalytics(metric: any) {
         else resolve({ ...metric, id, createdAt: now })
       }
     )
+  })
+}
+
+// ============ BUDGETS OPERATIONS ============
+
+export interface Budget {
+  id: string
+  name: string
+  category: string
+  period: 'monthly' | 'weekly' | 'yearly'
+  limitAmount: number
+  description?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export function addBudget(budget: Omit<Budget, 'id' | 'createdAt' | 'updatedAt'>) {
+  return new Promise<Budget>((resolve, reject) => {
+    const id = uuidv4()
+    const now = new Date().toISOString()
+
+    db.run(
+      `INSERT INTO budgets (id, name, category, period, limitAmount, description, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, budget.name, budget.category, budget.period, budget.limitAmount, budget.description, now, now],
+      (err) => {
+        if (err) reject(err)
+        else resolve({ ...budget, id, createdAt: now, updatedAt: now })
+      }
+    )
+  })
+}
+
+export function getBudgets() {
+  return new Promise<Budget[]>((resolve, reject) => {
+    db.all(`SELECT * FROM budgets ORDER BY createdAt DESC`, (err, rows: Budget[]) => {
+      if (err) reject(err)
+      else resolve(rows || [])
+    })
+  })
+}
+
+export function updateBudget(id: string, updates: Partial<Budget>) {
+  return new Promise<void>((resolve, reject) => {
+    const now = new Date().toISOString()
+    const sanitized = { ...updates } as any
+    delete sanitized.id
+    delete sanitized.createdAt
+    delete sanitized.updatedAt
+
+    const fields = Object.keys(sanitized).map(k => `${k} = ?`)
+    const values = Object.values(sanitized)
+    if (fields.length === 0) {
+      resolve()
+      return
+    }
+
+    db.run(
+      `UPDATE budgets SET ${fields.join(', ')}, updatedAt = ? WHERE id = ?`,
+      [...values, now, id],
+      (err) => {
+        if (err) reject(err)
+        else resolve()
+      }
+    )
+  })
+}
+
+export function deleteBudget(id: string) {
+  return new Promise<void>((resolve, reject) => {
+    db.run(`DELETE FROM budgets WHERE id = ?`, [id], (err) => {
+      if (err) reject(err)
+      else resolve()
+    })
+  })
+}
+
+// ============ BILLS OPERATIONS ============
+
+export interface Bill {
+  id: string
+  name: string
+  category: string
+  amount: number
+  nextDueDate: string
+  recurring: 'once' | 'weekly' | 'monthly' | 'yearly'
+  isPaid: boolean
+  lastPaidDate?: string
+  description?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export function addBill(bill: Omit<Bill, 'id' | 'createdAt' | 'updatedAt'>) {
+  return new Promise<Bill>((resolve, reject) => {
+    const id = uuidv4()
+    const now = new Date().toISOString()
+
+    db.run(
+      `INSERT INTO bills (id, name, category, amount, nextDueDate, recurring, isPaid, lastPaidDate, description, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        bill.name,
+        bill.category,
+        bill.amount,
+        bill.nextDueDate,
+        bill.recurring,
+        bill.isPaid ? 1 : 0,
+        bill.lastPaidDate,
+        bill.description,
+        now,
+        now
+      ],
+      (err) => {
+        if (err) reject(err)
+        else resolve({ ...bill, id, createdAt: now, updatedAt: now })
+      }
+    )
+  })
+}
+
+export function getBills() {
+  return new Promise<Bill[]>((resolve, reject) => {
+    db.all(`SELECT * FROM bills ORDER BY nextDueDate ASC`, (err, rows: any[]) => {
+      if (err) reject(err)
+      else {
+        const mapped = (rows || []).map(r => ({
+          ...r,
+          isPaid: r.isPaid === 1
+        })) as Bill[]
+        resolve(mapped)
+      }
+    })
+  })
+}
+
+export function updateBill(id: string, updates: Partial<Bill>) {
+  return new Promise<void>((resolve, reject) => {
+    const now = new Date().toISOString()
+    const sanitized: any = { ...updates }
+    delete sanitized.id
+    delete sanitized.createdAt
+    delete sanitized.updatedAt
+
+    if (typeof sanitized.isPaid === 'boolean') {
+      sanitized.isPaid = sanitized.isPaid ? 1 : 0
+    }
+
+    const fields = Object.keys(sanitized).map(k => `${k} = ?`)
+    const values = Object.values(sanitized)
+    if (fields.length === 0) {
+      resolve()
+      return
+    }
+
+    db.run(
+      `UPDATE bills SET ${fields.join(', ')}, updatedAt = ? WHERE id = ?`,
+      [...values, now, id],
+      (err) => {
+        if (err) reject(err)
+        else resolve()
+      }
+    )
+  })
+}
+
+export function deleteBill(id: string) {
+  return new Promise<void>((resolve, reject) => {
+    db.run(`DELETE FROM bills WHERE id = ?`, [id], (err) => {
+      if (err) reject(err)
+      else resolve()
+    })
+  })
+}
+
+function addPeriod(dateIso: string, recurring: Bill['recurring']): string {
+  const d = new Date(dateIso)
+  if (Number.isNaN(d.getTime())) return dateIso
+  if (recurring === 'weekly') d.setDate(d.getDate() + 7)
+  else if (recurring === 'monthly') d.setMonth(d.getMonth() + 1)
+  else if (recurring === 'yearly') d.setFullYear(d.getFullYear() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
+export function payBill(id: string, paidDate: string) {
+  return new Promise<void>((resolve, reject) => {
+    db.serialize(() => {
+      db.run('BEGIN TRANSACTION')
+
+      db.get(`SELECT * FROM bills WHERE id = ?`, [id], (err, row: any) => {
+        if (err) {
+          db.run('ROLLBACK')
+          reject(err)
+          return
+        }
+        if (!row) {
+          db.run('ROLLBACK')
+          reject(new Error('Bill not found'))
+          return
+        }
+
+        const bill: Bill = {
+          ...row,
+          isPaid: row.isPaid === 1
+        }
+
+        // Create a transaction for the payment
+        const txNow = new Date().toISOString()
+        const txId = uuidv4()
+        db.run(
+          `INSERT INTO transactions (id, type, description, amount, date, category, recurring, createdAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            txId,
+            'expense',
+            bill.name,
+            bill.amount,
+            paidDate,
+            bill.category,
+            'once',
+            txNow,
+            txNow
+          ],
+          (txErr) => {
+            if (txErr) {
+              db.run('ROLLBACK')
+              reject(txErr)
+              return
+            }
+
+            const nextDue = bill.recurring === 'once' ? bill.nextDueDate : addPeriod(bill.nextDueDate, bill.recurring)
+            const isPaid = bill.recurring === 'once'
+            const now = new Date().toISOString()
+
+            db.run(
+              `UPDATE bills
+               SET isPaid = ?, lastPaidDate = ?, nextDueDate = ?, updatedAt = ?
+               WHERE id = ?`,
+              [isPaid ? 1 : 0, paidDate, nextDue, now, id],
+              (updErr) => {
+                if (updErr) {
+                  db.run('ROLLBACK')
+                  reject(updErr)
+                  return
+                }
+
+                db.run('COMMIT', (commitErr) => {
+                  if (commitErr) reject(commitErr)
+                  else resolve()
+                })
+              }
+            )
+          }
+        )
+      })
+    })
+  })
+}
+
+// ============ GOALS OPERATIONS ============
+
+export interface Goal {
+  id: string
+  name: string
+  category: string
+  currentAmount: number
+  targetAmount: number
+  targetDate?: string
+  description?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export function addGoal(goal: Omit<Goal, 'id' | 'createdAt' | 'updatedAt'>) {
+  return new Promise<Goal>((resolve, reject) => {
+    const id = uuidv4()
+    const now = new Date().toISOString()
+
+    db.run(
+      `INSERT INTO goals (id, name, category, currentAmount, targetAmount, targetDate, description, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, goal.name, goal.category, goal.currentAmount, goal.targetAmount, goal.targetDate, goal.description, now, now],
+      (err) => {
+        if (err) reject(err)
+        else resolve({ ...goal, id, createdAt: now, updatedAt: now })
+      }
+    )
+  })
+}
+
+export function getGoals() {
+  return new Promise<Goal[]>((resolve, reject) => {
+    db.all(`SELECT * FROM goals ORDER BY createdAt DESC`, (err, rows: Goal[]) => {
+      if (err) reject(err)
+      else resolve(rows || [])
+    })
+  })
+}
+
+export function updateGoal(id: string, updates: Partial<Goal>) {
+  return new Promise<void>((resolve, reject) => {
+    const now = new Date().toISOString()
+    const sanitized: any = { ...updates }
+    delete sanitized.id
+    delete sanitized.createdAt
+    delete sanitized.updatedAt
+
+    const fields = Object.keys(sanitized).map(k => `${k} = ?`)
+    const values = Object.values(sanitized)
+    if (fields.length === 0) {
+      resolve()
+      return
+    }
+
+    db.run(
+      `UPDATE goals SET ${fields.join(', ')}, updatedAt = ? WHERE id = ?`,
+      [...values, now, id],
+      (err) => {
+        if (err) reject(err)
+        else resolve()
+      }
+    )
+  })
+}
+
+export function deleteGoal(id: string) {
+  return new Promise<void>((resolve, reject) => {
+    db.run(`DELETE FROM goals WHERE id = ?`, [id], (err) => {
+      if (err) reject(err)
+      else resolve()
+    })
   })
 }
 

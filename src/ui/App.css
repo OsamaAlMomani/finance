@@ -3,15 +3,6 @@
 @import './styles/design-system/animations.css';
 @import './styles/design-system/utilities.css';
 
-:root {
-  --bg-primary: #0f1419;
-  --bg-secondary: #1a1f26;
-  --text-primary: #e0e0e0;
-  --text-secondary: #a0a0a0;
-  --accent-color: #00d4ff;
-  --border-color: #2a3038;
-}
-
 #root {
   width: 100%;
   margin: 0;
@@ -23,7 +14,7 @@ html, body {
   padding: 0;
   width: 100%;
   height: 100%;
-  background-color: var(--bg-primary);
+  background-color: var(--app-bg);
   color: var(--text-primary);
 }
 

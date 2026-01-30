@@ -1,0 +1,131 @@
+.delete-modal {
+  max-width: 400px;
+}
+
+.delete-header {
+  padding: 24px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.delete-icon-wrapper {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(220, 38, 38, 0.15);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: #dc2626;
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  box-shadow: 0 8px 24px rgba(220, 38, 38, 0.1);
+}
+
+.delete-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.delete-body {
+  padding: 20px;
+  text-align: center;
+}
+
+.delete-body p {
+  margin: 8px 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.delete-body .event-title {
+  color: var(--text-primary);
+  font-weight: 500;
+  margin: 12px 0;
+  font-size: 1rem;
+  word-break: break-word;
+}
+
+.delete-body .warning-text {
+  margin-top: 16px;
+  color: #dc2626;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  padding: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--bg-tertiary);
+}
+
+.btn-danger {
+  background-color: #dc2626;
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: #b91c1c;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px #dc262640;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .delete-header {
+    padding: 16px;
+  }
+
+  .delete-body {
+    padding: 16px;
+  }
+
+  .modal-actions {
+    flex-direction: column-reverse;
+    padding: 16px;
+  }
+
+  .btn {
+    width: 100%;
+  }
+}

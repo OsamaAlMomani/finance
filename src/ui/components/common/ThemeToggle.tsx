@@ -1,8 +1,9 @@
 import { useTheme } from '../../contexts/ThemeContext'
-import { Sun, Moon, Monitor } from 'lucide-react'
+import { Palette } from 'lucide-react'
 import './ThemeToggle.css'
 
 type ToggleVariant = 'button' | 'switch' | 'dropdown'
+type ThemeId = 'theme-1' | 'theme-2' | 'theme-3' | 'theme-4' | 'theme-5' | 'theme-6' | 'theme-7'
 
 interface ThemeToggleProps {
   variant?: ToggleVariant
@@ -10,28 +11,45 @@ interface ThemeToggleProps {
   className?: string
 }
 
+const themes: Array<{ id: ThemeId; label: string }> = [
+  { id: 'theme-1', label: 'Default' },
+  { id: 'theme-2', label: 'Purple' },
+  { id: 'theme-3', label: 'Green' },
+  { id: 'theme-4', label: 'Orange' },
+  { id: 'theme-5', label: 'Pink' },
+  { id: 'theme-6', label: 'Dark' },
+  { id: 'theme-7', label: 'Light' }
+]
+
 function ThemeToggle({ 
   variant = 'button', 
   showLabel = false,
   className = '' 
 }: ThemeToggleProps) {
-  const { theme, resolvedTheme, setTheme, toggleTheme } = useTheme()
+  const { currentTheme, setTheme } = useTheme()
+
+  const cycleTheme = () => {
+    const currentIndex = themes.findIndex(t => t.id === currentTheme)
+    const nextIndex = (currentIndex + 1) % themes.length
+    setTheme(themes[nextIndex].id)
+  }
+
+  const currentThemeLabel = themes.find(t => t.id === currentTheme)?.label || 'Default'
 
   if (variant === 'button') {
     return (
       <button 
         className={`theme-toggle-btn ${className}`}
-        onClick={toggleTheme}
-        aria-label={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} mode`}
-        title={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} mode`}
+        onClick={cycleTheme}
+        aria-label="Cycle theme"
+        title={`Current: ${currentThemeLabel}`}
       >
         <span className="theme-icon-wrapper">
-          <Sun className="theme-icon sun-icon" size={18} />
-          <Moon className="theme-icon moon-icon" size={18} />
+          <Palette className="theme-icon" size={18} />
         </span>
         {showLabel && (
           <span className="theme-label">
-            {resolvedTheme === 'dark' ? 'Dark' : 'Light'}
+            {currentThemeLabel}
           </span>
         )}
       </button>
@@ -40,28 +58,18 @@ function ThemeToggle({
 
   if (variant === 'switch') {
     return (
-      <label className={`theme-toggle-switch ${className}`}>
-        <input
-          type="checkbox"
-          checked={resolvedTheme === 'dark'}
-          onChange={toggleTheme}
-          aria-label="Toggle dark mode"
-        />
-        <span className="switch-track">
-          <span className="switch-thumb">
-            {resolvedTheme === 'dark' ? (
-              <Moon size={12} />
-            ) : (
-              <Sun size={12} />
-            )}
-          </span>
-        </span>
+      <button
+        className={`theme-toggle-switch ${className}`}
+        onClick={cycleTheme}
+        aria-label="Cycle theme"
+      >
+        <Palette size={18} />
         {showLabel && (
           <span className="switch-label">
-            {resolvedTheme === 'dark' ? 'Dark' : 'Light'} Mode
+            {currentThemeLabel}
           </span>
         )}
-      </label>
+      </button>
     )
   }
 
@@ -70,30 +78,17 @@ function ThemeToggle({
     <div className={`theme-toggle-dropdown ${className}`}>
       <span className="dropdown-label">Theme</span>
       <div className="dropdown-options">
-        <button
-          className={`dropdown-option ${theme === 'light' ? 'active' : ''}`}
-          onClick={() => setTheme('light')}
-          aria-label="Light mode"
-        >
-          <Sun size={16} />
-          <span>Light</span>
-        </button>
-        <button
-          className={`dropdown-option ${theme === 'dark' ? 'active' : ''}`}
-          onClick={() => setTheme('dark')}
-          aria-label="Dark mode"
-        >
-          <Moon size={16} />
-          <span>Dark</span>
-        </button>
-        <button
-          className={`dropdown-option ${theme === 'system' ? 'active' : ''}`}
-          onClick={() => setTheme('system')}
-          aria-label="System theme"
-        >
-          <Monitor size={16} />
-          <span>System</span>
-        </button>
+        {themes.map(theme => (
+          <button
+            key={theme.id}
+            className={`dropdown-option ${currentTheme === theme.id ? 'active' : ''}`}
+            onClick={() => setTheme(theme.id)}
+            aria-label={theme.label}
+          >
+            <Palette size={16} />
+            <span>{theme.label}</span>
+          </button>
+        ))}
       </div>
     </div>
   )

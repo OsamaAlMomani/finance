@@ -10,8 +10,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  background: rgba(18, 34, 52, 0.2);
+  backdrop-filter: blur(10px);
   animation: fadeIn var(--duration-200) var(--ease-out);
 }
 
@@ -22,8 +22,8 @@
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-primary);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border-color, rgba(56, 189, 248, 0.25));
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-2xl);
   animation: scaleIn var(--duration-200) var(--ease-spring);
@@ -47,8 +47,8 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--border-primary);
-  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color, rgba(56, 189, 248, 0.25));
+  background: var(--accent-08, rgba(56, 189, 248, 0.08));
 }
 
 .shortcuts-modal-title {

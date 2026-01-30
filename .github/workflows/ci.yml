@@ -1,0 +1,319 @@
+name: Finance App CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: '20.x'
+
+jobs:
+  # ============================================================
+  # LINT AND TYPE CHECK
+  # ============================================================
+  lint:
+    name: 🔍 Lint & Type Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: 📚 Install dependencies
+        run: npm ci
+        
+      - name: 🔍 Run ESLint
+        run: npm run lint
+        
+      - name: 📝 TypeScript Type Check
+        run: npx tsc --noEmit
+
+  # ============================================================
+  # UNIT TESTS
+  # ============================================================
+  unit-tests:
+    name: 🧪 Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: 📚 Install dependencies
+        run: npm ci
+        
+      - name: 🧪 Run Unit Tests
+        run: npm run test:unit
+        
+      - name: 📊 Upload Coverage Report
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./coverage/lcov.info
+          flags: unit-tests
+          name: unit-coverage
+          fail_ci_if_error: false
+
+  # ============================================================
+  # INTEGRATION TESTS
+  # ============================================================
+  integration-tests:
+    name: 🔗 Integration Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: 📚 Install dependencies
+        run: npm ci
+        
+      - name: 🔗 Run Integration Tests
+        run: npm run test:integration
+        
+      - name: 📊 Upload Coverage Report
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./coverage/lcov.info
+          flags: integration-tests
+          name: integration-coverage
+          fail_ci_if_error: false
+
+  # ============================================================
+  # E2E TESTS
+  # ============================================================
+  e2e-tests:
+    name: 🌐 E2E Tests
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests]
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: 📚 Install dependencies
+        run: npm ci
+        
+      - name: 🎭 Install Playwright Browsers
+        run: npx playwright install --with-deps chromium
+        
+      - name: 🏗️ Build Application
+        run: npm run build
+        
+      - name: 🌐 Run E2E Tests
+        run: npm run test:e2e
+        
+      - name: 📁 Upload E2E Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-test-results
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 30
+
+  # ============================================================
+  # NON-FUNCTIONAL TESTS (Performance, Security, A11y)
+  # ============================================================
+  non-functional-tests:
+    name: ⚡ Non-Functional Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: 📚 Install dependencies
+        run: npm ci
+        
+      - name: ⚡ Run Performance Tests
+        run: npm run test:performance
+        
+      - name: 🛡️ Run Security Tests
+        run: npm run test:security
+        
+      - name: ♿ Run Accessibility Tests
+        run: npm run test:a11y
+
+  # ============================================================
+  # BUILD
+  # ============================================================
+  build:
+    name: 🏗️ Build Application
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests]
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: 📚 Install dependencies
+        run: npm ci
+        
+      - name: 🏗️ Build Application
+        run: npm run build
+        
+      - name: 📁 Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: react-dist/
+          retention-days: 7
+
+  # ============================================================
+  # SECURITY AUDIT
+  # ============================================================
+  security-audit:
+    name: 🔐 Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: 📚 Install dependencies
+        run: npm ci
+        
+      - name: 🔐 Run npm audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+        
+      - name: 🔍 Run Snyk Security Scan
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+  # ============================================================
+  # ELECTRON BUILD (Windows, macOS, Linux)
+  # ============================================================
+  electron-build:
+    name: 📦 Electron Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [build, e2e-tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: 📚 Install dependencies
+        run: npm ci
+        
+      - name: 🏗️ Build React
+        run: npm run build
+        
+      - name: 📦 Build Electron App
+        run: npm run dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: 📁 Upload Electron Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-build-${{ matrix.os }}
+          path: release/
+          retention-days: 30
+
+  # ============================================================
+  # DEPLOY PREVIEW (For PRs)
+  # ============================================================
+  deploy-preview:
+    name: 🚀 Deploy Preview
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        
+      - name: 📥 Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: react-dist/
+          
+      - name: 🚀 Deploy to Preview
+        # Add your deployment step here (Vercel, Netlify, etc.)
+        run: echo "Deploy preview would happen here"
+
+  # ============================================================
+  # TEST REPORT SUMMARY
+  # ============================================================
+  test-summary:
+    name: 📋 Test Summary
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, e2e-tests, non-functional-tests]
+    if: always()
+    
+    steps:
+      - name: 📋 Generate Test Summary
+        run: |
+          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Type | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit Tests | ${{ needs.unit-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration Tests | ${{ needs.integration-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| E2E Tests | ${{ needs.e2e-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Non-Functional Tests | ${{ needs.non-functional-tests.result }} |" >> $GITHUB_STEP_SUMMARY

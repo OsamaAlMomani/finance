@@ -10,9 +10,9 @@ export default function Settings() {
 
   useEffect(() => {
     const settings = getAnalyticsSettings()
-    setAnalyticsEnabled(settings.enabled)
-    setEndpoint(settings.endpoint)
-    setClientId(settings.clientId)
+    setAnalyticsEnabled(Boolean(settings.enabled))
+    setEndpoint(settings.endpoint ?? '')
+    setClientId(settings.clientId ?? '')
   }, [])
 
   const handleSave = () => {

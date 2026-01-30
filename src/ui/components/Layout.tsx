@@ -13,7 +13,7 @@ import {
   Search
 } from 'lucide-react'
 import QuickAddModal from './QuickAddModal'
-import ThemeToggle from './common/ThemeToggle'
+import ThemeSelector from './common/ThemeSelector'
 import { useKeyboardShortcuts } from '../contexts/KeyboardShortcutsContext'
 import { trackEvent } from '../services/analytics'
 import '../styles/Layout.css'
@@ -138,7 +138,7 @@ export default function Layout() {
             </div>
           </div>
           <div className="topbar-right">
-            <ThemeToggle variant="button" />
+            <ThemeSelector />
             <button
               className="quick-add-icon-btn"
               onClick={() => {

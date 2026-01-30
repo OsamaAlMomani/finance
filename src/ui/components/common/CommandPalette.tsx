@@ -11,8 +11,7 @@ import {
   FileText,
   DollarSign,
   Plus,
-  Moon,
-  Sun,
+  Palette,
   AlertTriangle,
   Target,
   BarChart3,
@@ -49,7 +48,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onQuic
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-  const { theme, setTheme } = useTheme();
+  const { currentTheme, setTheme } = useTheme();
   const { info, success } = useNotification();
 
   // Define all commands
@@ -214,16 +213,19 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onQuic
     },
     // Settings
     {
-      id: 'settings-dark-mode',
-      title: theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode',
-      description: 'Toggle between dark and light themes',
-      icon: theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />,
+      id: 'settings-change-theme',
+      title: 'Change Theme',
+      description: `Current: ${currentTheme.replace('theme-', 'Theme ')}`,
+      icon: <Palette size={18} />,
       category: 'settings',
-      keywords: ['theme', 'dark', 'light', 'mode', 'toggle', 'appearance'],
+      keywords: ['theme', 'color', 'palette', 'appearance', 'style'],
       action: () => { 
-        setTheme(theme === 'dark' ? 'light' : 'dark');
-        success(`Switched to ${theme === 'dark' ? 'light' : 'dark'} mode`);
-        onClose();
+        const themes: Array<'theme-1' | 'theme-2' | 'theme-3' | 'theme-4' | 'theme-5' | 'theme-6' | 'theme-7'> = ['theme-1', 'theme-2', 'theme-3', 'theme-4', 'theme-5', 'theme-6', 'theme-7']
+        const currentIndex = themes.indexOf(currentTheme as any)
+        const nextTheme = themes[(currentIndex + 1) % themes.length]
+        setTheme(nextTheme)
+        success(`Switched to ${nextTheme.replace('theme-', 'Theme ')}`)
+        onClose()
       },
       shortcut: 'T'
     }

@@ -38,6 +38,20 @@ import {
   createAlert,
   updateAlert,
   deleteAlert,
+  // Plan features
+  addBudget,
+  getBudgets,
+  updateBudget,
+  deleteBudget,
+  addBill,
+  getBills,
+  updateBill,
+  deleteBill,
+  payBill,
+  addGoal,
+  getGoals,
+  updateGoal,
+  deleteGoal,
   type Transaction,
   type NetWorthEntry,
   type Expense,
@@ -48,6 +62,9 @@ import {
   type DashboardConfig,
   type AnalyticsData,
   type Alert,
+  type Budget,
+  type Bill,
+  type Goal,
   type TransactionFilter
 } from '../services/database.ts'
 
@@ -434,6 +451,143 @@ export function registerIpcHandlers(window: BrowserWindow) {
       broadcastUpdate('alerts-updated')
     } catch (error) {
       console.error('Error deleting alert:', error)
+      throw error
+    }
+  })
+
+  // ============ PLAN (BUDGETS / BILLS / GOALS) ============
+
+  ipcMain.handle('get-budgets', async () => {
+    try {
+      return await getBudgets()
+    } catch (error) {
+      console.error('Error fetching budgets:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('add-budget', async (_event, budget: Omit<Budget, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      const created = await addBudget(budget)
+      broadcastUpdate('budgets-updated')
+      return created
+    } catch (error) {
+      console.error('Error adding budget:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('update-budget', async (_event, id: string, updates: Partial<Budget>) => {
+    try {
+      await updateBudget(id, updates)
+      broadcastUpdate('budgets-updated')
+      return updates
+    } catch (error) {
+      console.error('Error updating budget:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('delete-budget', async (_event, id: string) => {
+    try {
+      await deleteBudget(id)
+      broadcastUpdate('budgets-updated')
+    } catch (error) {
+      console.error('Error deleting budget:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('get-bills', async () => {
+    try {
+      return await getBills()
+    } catch (error) {
+      console.error('Error fetching bills:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('add-bill', async (_event, bill: Omit<Bill, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      const created = await addBill(bill)
+      broadcastUpdate('bills-updated')
+      return created
+    } catch (error) {
+      console.error('Error adding bill:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('update-bill', async (_event, id: string, updates: Partial<Bill>) => {
+    try {
+      await updateBill(id, updates)
+      broadcastUpdate('bills-updated')
+      return updates
+    } catch (error) {
+      console.error('Error updating bill:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('delete-bill', async (_event, id: string) => {
+    try {
+      await deleteBill(id)
+      broadcastUpdate('bills-updated')
+    } catch (error) {
+      console.error('Error deleting bill:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('pay-bill', async (_event, id: string, paidDate: string) => {
+    try {
+      await payBill(id, paidDate)
+      broadcastUpdate('bills-updated')
+      broadcastUpdate('transactions-updated')
+      return { success: true }
+    } catch (error) {
+      console.error('Error paying bill:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('get-goals', async () => {
+    try {
+      return await getGoals()
+    } catch (error) {
+      console.error('Error fetching goals:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('add-goal', async (_event, goal: Omit<Goal, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      const created = await addGoal(goal)
+      broadcastUpdate('goals-updated')
+      return created
+    } catch (error) {
+      console.error('Error adding goal:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('update-goal', async (_event, id: string, updates: Partial<Goal>) => {
+    try {
+      await updateGoal(id, updates)
+      broadcastUpdate('goals-updated')
+      return updates
+    } catch (error) {
+      console.error('Error updating goal:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('delete-goal', async (_event, id: string) => {
+    try {
+      await deleteGoal(id)
+      broadcastUpdate('goals-updated')
+    } catch (error) {
+      console.error('Error deleting goal:', error)
       throw error
     }
   })
