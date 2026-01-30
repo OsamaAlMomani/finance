@@ -1,0 +1,78 @@
+=====================================================================
+ANALYSIS & THOUGHTS - FINANCE APP REBUILD
+=====================================================================
+
+I have analyzed the `info.txt` file and your current architecture. Below is the breakdown of the current state vs. the desired "Professional Personal App" state.
+
+--------------------------- ✂ THOUGHTS CUT HERE ---------------------------
+THOUGHTS:
+The `info.txt` outlines a robust, "No-AI" but "Smart" personal finance system. The core philosophy is splitting the "Dirty Work" (Data Entry, Budget Setup, Rule Config) from the "Clean View" (Dashboard, Summaries).
+
+Current Status:
+- You have a basic Electron + React setup.
+- The database (`src/services/database.ts`) is "flat" and missing critical relational entities (Accounts, Tax Rules).
+- The UI structure is present but needs to better reflect the "Themes" (Girly/Men) and the specific flow described.
+
+Key Architectural Shift Needed:
+1.  **Entity-First Database**: Move from just "Transactions" to "Account -> Transaction" model. This is crucial for accurate balances.
+2.  **Theme Engine**: A dedicated easy-switcher for the requested Men/Girly themes that changes not just colors but "vibe" (fonts, borders).
+3.  **Dashboard as a Read-Only View**: The Dashboard shouldn't be for editing. It should aggregate data from the "Dirty Work" sections.
+
+--------------------------- ✂ MISSING THINGS CUT HERE ---------------------------
+MISSING FEATURES (Must Build List):
+
+1.  **Database Strategy**:
+    - [ ] `Account` Table: linking transactions to specific sources (Bank, Cash, Wallet).
+    - [ ] `TaxRule` Table: Automating the tax calc logic described in Page 8.
+    - [ ] `Attachments`: Handling file paths for receipts/invoices.
+
+2.  **Core Logic**:
+    - [ ] **Data Normalizer**: The "Validate -> Normalize -> Categorize" pipeline described in Page 2.
+    - [ ] **Smart Forecaster**: The math-based averaging for "Next Month Expense" (no AI, just statistics).
+
+3.  **UI/UX**:
+    - [ ] **Theme Switcher**: Explicit "Girly" (Pastels, Watercolor) vs "Men" (Bold, Structural) toggle.
+    - [ ] **"Dirty Work" Sections**: Dedicated, efficient data-grid style pages for complex entry (Batch add transactions).
+
+--------------------------- ✂ NEXT MOVES CUT HERE ---------------------------
+NEXT MOVES & DISCUSSION:
+
+1.  **Database Refactor**: I will rebuild the SQLite schema to match `info.txt` exactly.
+    - Adding `accounts` table.
+    - Adding `tax_rules` table.
+    - Linking `goals` to `accounts`.
+
+2.  **Theme Implementation**:
+    - I will update `ThemeContext` to support the specific CSS variables found in your `info.txt` attachment.
+
+3.  **Dashboard Redesign**:
+    - I will clear out the current "Placeholder" widgets and replace them with "Video Game HUD" style logic: Real-time queries for Net Cashflow, Burn Rate, and Forecast.
+
+--------------------------- ✂ TO-DO LIST EXPANSION ---------------------------
+TO-DO (Prioritized):
+
+1.  [ ] **DB**: Execute SQL schema migration (Create new tables).
+2.  [ ] **BACKEND**: Update `ipcHandlers` to support new Account-based queries.
+3.  [ ] **UI**: Create `ThemeSwitcher.tsx` with the specific styles.
+4.  [ ] **UI**: Build the "Clean Dashboard" strictly following Page 4 of `info.txt`.
+
+--------------------------- ✂ FUTURE PLANS CUT HERE ---------------------------
+FUTURE PLANS:
+- **Receipt OCR**: Even though you said "No AI", simple OCR (Tesseract.js) runs locally and could automate "Price" and "Date" extraction cheaply.
+- **Export/Import**: Robust JSON backup is described. We should ensure this works for the *new* relational schema.
+
+--------------------------- ✂ HISTORY CUT HERE ---------------------------
+HISTORY:
+- **2026-02-04**: Session started. Analyzed `info.txt`. Cleared empty folders. Identified schema gaps (Account, Tax). Plan set to rebuild DB layer first.
+
+
+[x] Fixed build errors:
+    - Restored missing properties in OverviewEnhanced.tsx
+    - Fixed missing vitest/globals type definition by ensuring vitest is installed.
+    - Restored missing tsconfig.test.json.
+
+[2026-02-04 11:40:21] UPDATE:
+- Fixed "Old Style" issue by implementing full CSS Variable system required by Cards/Glass effects in themes.css.
+- Changed default theme to 'theme-men' to showcase the new design immediately.
+- Updated QuickAddModal to include Account Selection, linking the UI to the new Database Schema.
+- Validated that OverviewEnhanced uses the new "Glass" and "Elevated" card variants.

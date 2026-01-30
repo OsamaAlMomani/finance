@@ -1,40 +1,66 @@
-import { app, BrowserWindow } from 'electron'
-import path from 'path'
-import { fileURLToPath } from 'url'
-import { register } from 'esbuild-register/dist/node'
+import { app, BrowserWindow, ipcMain } from 'electron';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { initDatabase } from '../services/databaseService.js';
+import { registerIpcHandlers } from './ipcHandlers.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// Allow importing .ts files (ipc handlers + database) in the main process
-const { unregister } = register({ extensions: ['.ts'] })
+const isDev = !app.isPackaged;
 
-async function createWindow() {
-    const mainWindow = new BrowserWindow({
-        width: 1280,
-        height: 800,
-        webPreferences: {
-            nodeIntegration: false,
-            contextIsolation: true,
-            preload: path.join(__dirname, 'preload.cjs')
-        }
-    })
+let mainWindow;
+let dbInstance;
 
-    // Lazy-load TS modules after the esbuild register hook is active
-    const { registerIpcHandlers } = await import('./ipcHandlers.ts')
-    const { initializeDatabase } = await import('../services/database.ts')
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false 
+    },
+    title: 'SketchBoard Finance Pro'
+  });
 
-    // Initialize SQLite schema then wire IPC before showing the UI
-    await initializeDatabase()
-    registerIpcHandlers(mainWindow)
+  if (isDev) {
+    const devUrl = 'http://localhost:5173';
+    mainWindow.loadURL(devUrl);
 
-    await mainWindow.loadFile(path.join(app.getAppPath(), '/react-dist/index.html'))
+    mainWindow.webContents.on('did-fail-load', () => {
+      mainWindow.loadFile(path.join(__dirname, '../../react-dist/index.html'));
+    });
+
+    mainWindow.webContents.openDevTools();
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../../react-dist/index.html'));
+  }
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  // Initialize Database
+  const dbPath = path.join(app.getPath('userData'), 'finance.db');
+  console.log('Initializing database at:', dbPath);
+  try {
+    dbInstance = initDatabase(dbPath);
+    registerIpcHandlers();
+  } catch (error) {
+    console.error("Failed to initialize database:", error);
+  }
+
+  createWindow();
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
+  });
+});
 
 app.on('window-all-closed', () => {
-    unregister()
-    if (process.platform !== 'darwin') {
-        app.quit()
-    }
-})
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});

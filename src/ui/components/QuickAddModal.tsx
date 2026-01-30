@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useTransactions } from '../hooks/useFinanceData'
+import { useTransactions, useAccounts } from '../hooks/useFinanceData'
 import { X } from 'lucide-react'
 import '../styles/QuickAddModal.css'
 
@@ -11,11 +11,14 @@ interface QuickAddModalProps {
 
 export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAddModalProps) {
   const { addTransaction } = useTransactions()
+  const { accounts } = useAccounts()
+  
   const [type, setType] = useState<'income' | 'expense'>('expense')
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
   const [category, setCategory] = useState('')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [accountId, setAccountId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -23,7 +26,12 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
     if (!isOpen) return
     setType(initialType ?? 'expense')
     setError('')
-  }, [isOpen, initialType])
+    
+    // Default to first account if none selected
+    if (accounts.length > 0 && !accountId) {
+      setAccountId(accounts[0].id)
+    }
+  }, [isOpen, initialType, accounts, accountId])
 
   const commonCategories = type === 'expense'
     ? ['Food', 'Transport', 'Health', 'Entertainment', 'Utilities', 'Other']
@@ -37,6 +45,11 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
       return
     }
 
+    if (!accountId) {
+      setError('Please select an account')
+      return
+    }
+
     try {
       setLoading(true)
       setError('')
@@ -47,6 +60,7 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
         amount: parseFloat(amount),
         date,
         category: category || 'Uncategorized',
+        accountId, // Link to account
         recurring: 'once'
       })
 
@@ -70,7 +84,7 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
       <div className="quick-add-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Quick Add</h3>
-          <button className="close-btn" onClick={onClose}>
+          <button className="close-btn" onClick={onClose} aria-label="Close quick add" title="Close">
             <X size={20} />
           </button>
         </div>
@@ -96,8 +110,9 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
 
           {/* Form Fields */}
           <div className="form-group">
-            <label>Date</label>
+            <label htmlFor="quick-add-date">Date</label>
             <input
+              id="quick-add-date"
               type="date"
               value={date}
               onChange={e => setDate(e.target.value)}
@@ -106,8 +121,28 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
           </div>
 
           <div className="form-group">
-            <label>Description</label>
+            <label htmlFor="quick-add-account">Account</label>
+            <div className="select-wrapper">
+              <select 
+                id="quick-add-account"
+                value={accountId} 
+                onChange={e => setAccountId(e.target.value)}
+                required
+              >
+                <option value="" disabled>Select Account</option>
+                {accounts.map(acc => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name} ({acc.currency ?? 'USD'} {(acc.currentBalance ?? 0).toLocaleString()})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="quick-add-description">Description</label>
             <input
+              id="quick-add-description"
               type="text"
               placeholder="e.g., Grocery shopping"
               value={description}
@@ -117,8 +152,9 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
           </div>
 
           <div className="form-group">
-            <label>Amount (JOD)</label>
+            <label htmlFor="quick-add-amount">Amount (JOD)</label>
             <input
+              id="quick-add-amount"
               type="number"
               placeholder="0.00"
               step="0.01"
@@ -130,7 +166,7 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
           </div>
 
           <div className="form-group">
-            <label>Category</label>
+            <label htmlFor="quick-add-category">Category</label>
             <div className="category-picker">
               <div className="category-buttons">
                 {commonCategories.map(cat => (
@@ -145,6 +181,7 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
                 ))}
               </div>
               <input
+                id="quick-add-category"
                 type="text"
                 placeholder="Or enter custom..."
                 value={category}

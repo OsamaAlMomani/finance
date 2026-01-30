@@ -1,4 +1,4 @@
-import { useTransactions } from '../hooks/useFinanceData'
+import { useTransactions, useAccounts } from '../hooks/useFinanceData'
 import { 
   TrendingDown, 
   TrendingUp, 
@@ -41,22 +41,29 @@ const getDayName = (dateStr: string): string => {
   return date.toLocaleDateString('en-US', { weekday: 'short' })
 }
 
+const clampPercent = (value: number, step = 5): number => {
+  const safe = Math.max(0, Math.min(100, value))
+  return Math.round(safe / step) * step
+}
+
+const getBarHeightClass = (percentage: number): string => {
+  const stepped = clampPercent(Math.max(percentage, 5))
+  return `bar-height-${stepped}`
+}
+
+const getAverageLineClass = (percentage: number): string => {
+  const stepped = clampPercent(percentage)
+  return `avg-line-${stepped}`
+}
+
 export default function Overview() {
-  const { transactions, loading } = useTransactions()
+  const { transactions, loading: loadingTransactions } = useTransactions()
+  const { accounts, loading: loadingAccounts } = useAccounts()
+  
+  const loading = loadingTransactions || loadingAccounts
 
-  // Calculate totals
-  const totalIncome = transactions
-    .filter(t => t.type === 'income')
-    .reduce((sum, t) => sum + t.amount, 0)
-
-  const totalExpenses = transactions
-    .filter(t => t.type === 'expense')
-    .reduce((sum, t) => sum + Math.abs(t.amount), 0)
-
-  const totalNet = totalIncome - totalExpenses
-
-  // Calculate savings rate
-  const savingsRate = totalIncome > 0 ? (totalNet / totalIncome) * 100 : 0
+  // Calculate totals (Net Worth from Accounts)
+  const totalBalance = accounts.reduce((sum, acc) => sum + (acc.currentBalance ?? 0), 0)
 
   // Get current month data
   const now = new Date()
@@ -74,6 +81,10 @@ export default function Overview() {
   const currentMonthExpenses = currentMonthTransactions
     .filter(t => t.type === 'expense')
     .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+
+  // Calculate savings rate based on MONTHLY data
+  const monthlyNet = currentMonthIncome - currentMonthExpenses
+  const savingsRate = currentMonthIncome > 0 ? (monthlyNet / currentMonthIncome) * 100 : 0
 
   const lastMonthIncome = lastMonthTransactions
     .filter(t => t.type === 'income')
@@ -152,9 +163,9 @@ export default function Overview() {
     ? monthlyNetValues.reduce((sum, value) => sum + value, 0) / monthlyNetValues.length
     : 0
 
-  const projection3 = totalNet + avgMonthlyNet * 3
-  const projection6 = totalNet + avgMonthlyNet * 6
-  const projection12 = totalNet + avgMonthlyNet * 12
+  const projection3 = totalBalance + avgMonthlyNet * 3
+  const projection6 = totalBalance + avgMonthlyNet * 6
+  const projection12 = totalBalance + avgMonthlyNet * 12
 
   const openQuickAdd = (type: 'income' | 'expense') => {
     window.dispatchEvent(
@@ -194,9 +205,17 @@ export default function Overview() {
           {/* Main Stats Grid */}
           <section className="stats-grid">
             <StatCard
+              icon={<Wallet size={24} />}
+              label="Net Worth"
+              value={<CurrencyDisplay amount={totalBalance} currency="USD" type={totalBalance >= 0 ? 'income' : 'expense'} />}
+              color="primary"
+              variant="gradient"
+            />
+            
+            <StatCard
               icon={<TrendingUp size={24} />}
-              label="Total Income"
-              value={<CurrencyDisplay amount={totalIncome} currency="JOD" type="income" />}
+              label="Monthly Income"
+              value={<CurrencyDisplay amount={currentMonthIncome} currency="USD" type="income" />}
               trend={incomeChange !== 0 ? { value: Math.abs(incomeChange), direction: incomeChange >= 0 ? 'up' : 'down' } : undefined}
               color="success"
               variant="glass"
@@ -204,19 +223,11 @@ export default function Overview() {
             
             <StatCard
               icon={<TrendingDown size={24} />}
-              label="Total Expenses"
-              value={<CurrencyDisplay amount={totalExpenses} currency="JOD" type="expense" />}
+              label="Monthly Expenses"
+              value={<CurrencyDisplay amount={currentMonthExpenses} currency="USD" type="expense" />}
               trend={expenseChange !== 0 ? { value: Math.abs(expenseChange), direction: expenseChange >= 0 ? 'up' : 'down' } : undefined}
               color="danger"
               variant="glass"
-            />
-            
-            <StatCard
-              icon={<Wallet size={24} />}
-              label="Net Balance"
-              value={<CurrencyDisplay amount={totalNet} currency="JOD" type={totalNet >= 0 ? 'income' : 'expense'} showSign />}
-              color={totalNet >= 0 ? 'success' : 'danger'}
-              variant="gradient"
             />
             
             <StatCard
@@ -298,8 +309,7 @@ export default function Overview() {
                       <div key={day.date} className="bar-item">
                         <div className="bar-wrapper">
                           <div 
-                            className={`bar ${day.amount > avgPerDay ? 'over-average' : ''}`}
-                            style={{ height: `${Math.max(day.percentage, 5)}%` }}
+                            className={`bar ${day.amount > avgPerDay ? 'over-average' : ''} ${getBarHeightClass(day.percentage)}`}
                           >
                             {day.amount > 0 && (
                               <span className="bar-value">{formatAmount(day.amount)}</span>
@@ -309,7 +319,7 @@ export default function Overview() {
                         <span className="bar-label">{day.dayName}</span>
                       </div>
                     ))}
-                    <div className="average-line" style={{ bottom: `${(avgPerDay / maxDailyAmount) * 100}%` }}>
+                    <div className={`average-line ${getAverageLineClass((avgPerDay / maxDailyAmount) * 100)}`}>
                       <span>avg</span>
                     </div>
                   </div>

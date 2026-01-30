@@ -1,0 +1,35 @@
+.theme-card--theme-girly {
+  background: linear-gradient(135deg, #f093fb, #fff0fa);
+}
+
+.theme-card--theme-men {
+  background: linear-gradient(135deg, #2193b0, #e8f2f8);
+}
+
+.theme-card--theme-1 {
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+}
+
+.theme-card--theme-2 {
+  background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+}
+
+.theme-card--theme-3 {
+  background: linear-gradient(135deg, #10b981, #34d399);
+}
+
+.theme-card--theme-4 {
+  background: linear-gradient(135deg, #f59e0b, #fbbf24);
+}
+
+.theme-card--theme-5 {
+  background: linear-gradient(135deg, #ec4899, #f472b6);
+}
+
+.theme-card--theme-6 {
+  background: linear-gradient(135deg, #111827, #1f2937);
+}
+
+.theme-card--theme-7 {
+  background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+}

@@ -1,0 +1,210 @@
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+/* Reset & Base */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--primary-font);
+  background: var(--sketch-bg);
+  color: var(--ink-black);
+  overflow-x: hidden; /* Prevent horizontal scroll */
+}
+
+/* Default Theme - Hand Drawn Paper */
+:root {
+  --sketch-bg: #f8f9fd;
+  --paper-white: #ffffff;
+  --ink-black: #2c3e50;
+  --pencil-gray: #7f8c8d;
+  --sketch-blue: #3498db;
+  --sketch-red: #e74c3c;
+  --sketch-green: #2ecc71;
+  --sketch-yellow: #f39c12;
+  --sketch-purple: #9b59b6;
+  --shadow-sketch: rgba(52, 152, 219, 0.15);
+  --primary-font: 'Patrick Hand', cursive;
+  --heading-font: 'Caveat', cursive;
+}
+
+/* Girly Theme - Watercolor Pastels */
+body.girly-theme {
+    --sketch-bg: linear-gradient(135deg, #ffeef8 0%, #fff4f9 50%, #f8e8ff 100%);
+    --paper-white: rgba(255, 255, 255, 0.85);
+    --ink-black: #6b4665;
+    --pencil-gray: #a78ba5;
+    --sketch-blue: #f093fb;
+    --sketch-red: #ff6b9d;
+    --sketch-green: #96fbc4;
+    --sketch-yellow: #ffd89b;
+    --sketch-purple: #d4a5ff;
+    --shadow-sketch: rgba(240, 147, 251, 0.3);
+    --primary-font: 'Patrick Hand', cursive;
+    --heading-font: 'Pacifico', cursive;
+
+    background: linear-gradient(135deg, #ffeef8 0%, #fff4f9 25%, #f8e8ff 50%, #ffe8f5 75%, #fff0fa 100%);
+    background-attachment: fixed;
+}
+
+/* Men Theme - Bold Watercolor */
+body.men-theme {
+    --sketch-bg: linear-gradient(135deg, #e8f4f8 0%, #e8f0f8 50%, #f0e8f8 100%);
+    --paper-white: rgba(255, 255, 255, 0.9);
+    --ink-black: #1e3a5f;
+    --pencil-gray: #546e7a;
+    --sketch-blue: #2193b0;
+    --sketch-red: #cc2b5e;
+    --sketch-green: #00b09b;
+    --sketch-yellow: #f77f00;
+    --sketch-purple: #5a3f7e;
+    --shadow-sketch: rgba(33, 147, 176, 0.25);
+    --primary-font: 'Architects Daughter', cursive;
+    --heading-font: 'Righteous', cursive;
+    
+    background: linear-gradient(135deg, #e8f4f8 0%, #e8f0f8 50%, #f0e8f8 100%);
+    background-attachment: fixed;
+}
+
+/* Common Layout Components */
+.app-container {
+  display: flex;
+  height: 100vh;
+}
+
+.sidebar {
+  width: 250px;
+  background: var(--paper-white);
+  border-right: 2px dashed var(--pencil-gray);
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+}
+
+.main-content {
+  flex: 1;
+  padding: 2rem;
+  overflow-y: auto;
+}
+
+.card {
+  background: var(--paper-white);
+  border-radius: 12px;
+  box-shadow: 4px 4px 0px var(--shadow-sketch); 
+  border: 1px solid var(--pencil-gray);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.btn {
+  font-family: var(--primary-font);
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: 4px solid transparent; 
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: bold;
+}
+
+.heading-font {
+  font-family: var(--heading-font);
+}
+
+.category-color--default {
+  --cat-color: #9ca3af;
+  --cat-color-soft: #9ca3af33;
+}
+
+.category-color--green-500 {
+  --cat-color: #10B981;
+  --cat-color-soft: #10B98133;
+}
+
+.category-color--green-400 {
+  --cat-color: #34D399;
+  --cat-color-soft: #34D39933;
+}
+
+.category-color--red-500 {
+  --cat-color: #EF4444;
+  --cat-color-soft: #EF444433;
+}
+
+.category-color--amber-500 {
+  --cat-color: #F59E0B;
+  --cat-color-soft: #F59E0B33;
+}
+
+.category-color--blue-500 {
+  --cat-color: #3B82F6;
+  --cat-color-soft: #3B82F633;
+}
+
+.category-color--indigo-500 {
+  --cat-color: #6366F1;
+  --cat-color-soft: #6366F133;
+}
+
+.category-color--pink-500 {
+  --cat-color: #EC4899;
+  --cat-color-soft: #EC489933;
+}
+
+.category-color--purple-500 {
+  --cat-color: #8B5CF6;
+  --cat-color-soft: #8B5CF633;
+}
+
+.category-color--teal-500 {
+  --cat-color: #14B8A6;
+  --cat-color-soft: #14B8A633;
+}
+
+.category-pill {
+  border: 2px solid var(--cat-color);
+  color: var(--cat-color);
+  background-color: var(--cat-color-soft);
+}
+
+.category-color-bg {
+  background-color: var(--cat-color);
+}
+
+.category-color-text {
+  color: var(--cat-color);
+}
+
+.category-color-border {
+  border-color: var(--cat-color);
+}
+
+.category-color-swatch {
+  background-color: var(--cat-color);
+}
+
+.progress-bar {
+  width: 100%;
+  height: 0.75rem;
+  border-radius: 9999px;
+  overflow: hidden;
+  appearance: none;
+}
+
+.progress-bar::-webkit-progress-bar {
+  background-color: #f3f4f6;
+  border-radius: 9999px;
+}
+
+.progress-bar::-webkit-progress-value {
+  background-color: var(--cat-color);
+  border-radius: 9999px;
+}
+
+.progress-bar::-moz-progress-bar {
+  background-color: var(--cat-color);
+  border-radius: 9999px;
+}

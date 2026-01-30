@@ -1,59 +1,39 @@
-import { useState, useEffect, useCallback } from 'react'
-import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom'
-import Layout from './components/Layout'
-import Overview from './sections/OverviewEnhanced'
-import Timeline from './sections/Timeline'
-import Plan from './sections/Plan'
-import Insights from './sections/Insights'
-import Settings from './sections/Settings'
-import { ToastContainer } from './components/common/Toast'
-import { KeyboardShortcutsHelp } from './components/common/KeyboardShortcutsHelp'
-import { CommandPalette } from './components/common'
-import { initAnalytics, trackEvent } from './services/analytics'
-import './App.css'
+import { useEffect } from 'react';
+import { HashRouter, Routes, Route } from 'react-router-dom';
+import { Sidebar } from './components/Sidebar';
+import { Dashboard } from './pages/Dashboard';
+import { Settings } from './pages/Settings';
+import { Transactions } from './pages/Transactions';
+import { BudgetPage } from './pages/Budget';
+import { GoalsPage } from './pages/Goals';
+import { BillsPage } from './pages/Bills';
 
-function App() {
-  const Router = window.location.protocol === 'file:' ? HashRouter : BrowserRouter
-  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
-
-  // Global Ctrl+K handler for command palette
-  const handleGlobalKeyDown = useCallback((e: KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-      e.preventDefault()
-      setCommandPaletteOpen(prev => !prev)
-    }
-  }, [])
-
+const App = () => {
   useEffect(() => {
-    window.addEventListener('keydown', handleGlobalKeyDown)
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
-  }, [handleGlobalKeyDown])
-
-  useEffect(() => {
-    initAnalytics()
-    void trackEvent('app_opened')
-  }, [])
+    // Load theme
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'girly') document.body.classList.add('girly-theme');
+    if (savedTheme === 'men') document.body.classList.add('men-theme');
+  }, []);
 
   return (
-    <Router>
-      <Routes>
-        <Route element={<Layout />}>
-          <Route path="/" element={<Overview />} />
-          <Route path="/timeline" element={<Timeline />} />
-          <Route path="/plan" element={<Plan />} />
-          <Route path="/insights" element={<Insights />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
-      <ToastContainer position="top-right" />
-      <KeyboardShortcutsHelp />
-      <CommandPalette 
-        isOpen={commandPaletteOpen} 
-        onClose={() => setCommandPaletteOpen(false)} 
-      />
-    </Router>
-  )
-}
+    <HashRouter>
+      <div className="app-container">
+        <Sidebar />
+        <main className="main-content">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/settings" element={<Settings />} />
+            
+            <Route path="/transactions" element={<Transactions />} />
+            <Route path="/budget" element={<BudgetPage />} />
+            <Route path="/goals" element={<GoalsPage />} />
+            <Route path="/bills" element={<BillsPage />} />
+          </Routes>
+        </main>
+      </div>
+    </HashRouter>
+  );
+};
 
-export default App
+export default App;
