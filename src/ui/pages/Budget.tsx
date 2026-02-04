@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { PlusCircle, Wallet, Trash2 } from 'lucide-react';
+import { PlusCircle, Wallet, Trash2, Edit2 } from 'lucide-react';
 import { getCategoryColorClass } from '../utils/categoryColor';
 
 interface Budget {
@@ -25,6 +25,7 @@ export const BudgetPage = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
 
   const [newBudget, setNewBudget] = useState({
     categoryId: '',
@@ -54,12 +55,31 @@ export const BudgetPage = () => {
     }
   };
 
+  const handleOpenModal = (budget?: Budget) => {
+    if (budget) {
+      setEditingBudget(budget);
+      setNewBudget({
+        categoryId: budget.category_id,
+        period: budget.period,
+        limit: budget.limit_amount.toString()
+      });
+    } else {
+      setEditingBudget(null);
+      setNewBudget({
+        categoryId: categories.length > 0 ? categories[0].id : '',
+        period: 'monthly',
+        limit: ''
+      });
+    }
+    setShowModal(true);
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!window.electron) return;
 
     await window.electron.invoke('db-save-budget', {
-      id: uuidv4(),
+      id: editingBudget ? editingBudget.id : uuidv4(),
       category_id: newBudget.categoryId,
       period: newBudget.period,
       limit_amount: parseFloat(newBudget.limit)
@@ -76,30 +96,38 @@ export const BudgetPage = () => {
     loadData();
   };
 
-  // Mock progress calculation for now
-  // Real implemention requires summing transactions for current month
-  const getProgress = (limit: number) => {
-    const spent = Math.random() * limit; // Random for demo
-    const percentage = Math.min((spent / limit) * 100, 100);
-    return { spent, percentage };
-  }
-
   if (loading) return <div>Loading...</div>;
 
   return (
     <div className="h-full flex flex-col">
        <div className="flex justify-between items-center mb-6">
         <h2 className="text-3xl font-bold font-heading">Budgets</h2>
-        <button onClick={() => setShowModal(true)} className="btn bg-green-500 text-white flex items-center gap-2">
+        <button onClick={() => handleOpenModal()} className="btn bg-green-500 text-white flex items-center gap-2">
           <PlusCircle size={20} /> Create Budget
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {budgets.map(b => {
-             const { spent, percentage } = getProgress(b.limit_amount);
+             const spent = b.spent || 0;
+             const percentage = Math.min((spent / b.limit_amount) * 100, 100);
+             const isExceeded = spent > b.limit_amount;
+             const isNearLimit = spent > b.limit_amount * 0.9 && !isExceeded;
              return (
-                <div key={b.id} className="card relative overflow-hidden">
+                <div key={b.id} className={`card relative overflow-hidden group ${
+                  isExceeded ? 'border-2 border-red-500 bg-red-50' : 
+                  isNearLimit ? 'border-2 border-yellow-500 bg-yellow-50' : ''
+                }`}>
+                  {isExceeded && (
+                    <div className="bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full absolute top-2 right-2 z-10">
+                      ⚠️ EXCEEDED
+                    </div>
+                  )}
+                  {isNearLimit && (
+                    <div className="bg-yellow-500 text-white text-xs font-bold px-3 py-1 rounded-full absolute top-2 right-2 z-10">
+                      ⚠️ NEAR LIMIT
+                    </div>
+                  )}
                     <div className="flex justify-between items-start mb-4">
                         <div className="flex items-center gap-3">
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white category-color-bg ${getCategoryColorClass(b.category_color)}`}>
@@ -115,10 +143,18 @@ export const BudgetPage = () => {
                             <div className="flex gap-2 justify-end items-center">
                                 <p className="text-sm text-gray-400">Limit</p>
                                 <button
+                                  onClick={() => handleOpenModal(b)}
+                                  className="text-blue-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  aria-label={`Edit budget for ${b.category_name}`}
+                                  title="Edit budget"
+                                >
+                                  <Edit2 size={14} />
+                                </button>
+                                <button
                                   onClick={() => handleDelete(b.id)}
-                                  className="text-red-300 hover:text-red-500"
+                                  className="text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                                   aria-label={`Delete budget for ${b.category_name}`}
-                                  title={`Delete budget for ${b.category_name}`}
+                                  title="Delete budget"
                                 >
                                   <Trash2 size={14} />
                                 </button>
@@ -127,8 +163,12 @@ export const BudgetPage = () => {
                     </div>
 
                     <div className="mb-2 flex justify-between text-sm font-bold">
-                            <span className={`category-color-text ${getCategoryColorClass(b.category_color)}`}>${spent.toFixed(0)} spent</span>
-                        <span className="text-gray-400">{(b.limit_amount - spent).toFixed(0)} left</span>
+                      <span className={isExceeded ? 'text-red-600' : `category-color-text ${getCategoryColorClass(b.category_color)}`}>
+                        ${spent.toFixed(0)} spent
+                      </span>
+                      <span className={isExceeded ? 'text-red-600' : 'text-gray-400'}>
+                        {isExceeded ? `$${(spent - b.limit_amount).toFixed(0)} over` : `$${(b.limit_amount - spent).toFixed(0)} left`}
+                      </span>
                     </div>
 
                           <progress
@@ -149,7 +189,9 @@ export const BudgetPage = () => {
       {showModal && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
             <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm border-2 border-gray-200">
-                <h3 className="text-2xl font-bold mb-4 font-heading">New Budget</h3>
+                <h3 className="text-2xl font-bold mb-4 font-heading">
+                    {editingBudget ? 'Edit Budget' : 'New Budget'}
+                </h3>
                 <form onSubmit={handleSave} className="space-y-4">
                     <div>
                         <label htmlFor="budget-category" className="block text-sm font-bold mb-1">Category</label>
@@ -192,7 +234,9 @@ export const BudgetPage = () => {
 
                     <div className="flex gap-4 pt-4">
                         <button type="button" onClick={() => setShowModal(false)} className="flex-1 btn bg-gray-100">Cancel</button>
-                        <button type="submit" className="flex-1 btn bg-green-500 text-white">Save Budget</button>
+                        <button type="submit" className="flex-1 btn bg-green-500 text-white">
+                            {editingBudget ? 'Update' : 'Save Budget'}
+                        </button>
                     </div>
                 </form>
             </div>

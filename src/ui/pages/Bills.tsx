@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Calendar, CheckCircle, Clock, AlertCircle, Trash2 } from 'lucide-react';
+import { Calendar, CheckCircle, Clock, AlertCircle, Trash2, Edit2 } from 'lucide-react';
 
 interface Bill {
   id: string;
@@ -15,6 +15,7 @@ interface Bill {
 export const BillsPage = () => {
     const [bills, setBills] = useState<Bill[]>([]);
     const [showModal, setShowModal] = useState(false);
+    const [editingBill, setEditingBill] = useState<Bill | null>(null);
     const [newBill, setNewBill] = useState({
         name: '', amount: '', date: '', recur: 'monthly'
     });
@@ -25,17 +26,33 @@ export const BillsPage = () => {
 
     useEffect(() => { loadBills(); }, []);
 
+    const handleOpenModal = (bill?: Bill) => {
+        if (bill) {
+            setEditingBill(bill);
+            setNewBill({
+                name: bill.name,
+                amount: bill.amount.toString(),
+                date: bill.next_due_date,
+                recur: bill.recurrence
+            });
+        } else {
+            setEditingBill(null);
+            setNewBill({ name: '', amount: '', date: '', recur: 'monthly' });
+        }
+        setShowModal(true);
+    };
+
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         if(!window.electron) return;
         await window.electron.invoke('db-save-bill', {
-            id: uuidv4(),
+            id: editingBill ? editingBill.id : uuidv4(),
             name: newBill.name,
             amount: parseFloat(newBill.amount),
             next_due_date: newBill.date,
             recurrence: newBill.recur,
-            is_paid: false,
-            auto_pay: false
+            is_paid: editingBill ? editingBill.is_paid : false,
+            auto_pay: editingBill ? editingBill.auto_pay : false
         });
         setShowModal(false);
         loadBills();
@@ -61,14 +78,14 @@ export const BillsPage = () => {
         <div className="h-full">
              <div className="flex justify-between items-center mb-6">
                 <h2 className="text-3xl font-bold font-heading">Upcoming Bills</h2>
-                <button onClick={() => setShowModal(true)} className="btn bg-red-400 text-white flex items-center gap-2">
+                <button onClick={() => handleOpenModal()} className="btn bg-red-400 text-white flex items-center gap-2">
                     <Calendar size={20} /> Add Bill
                 </button>
             </div>
 
             <div className="space-y-4">
                 {bills.map(b => (
-                    <div key={b.id} className={`card flex items-center justify-between p-4 ${b.is_paid ? 'opacity-60 bg-gray-50' : 'border-l-4 border-red-400'}`}>
+                    <div key={b.id} className={`card flex items-center justify-between p-4 group ${b.is_paid ? 'opacity-60 bg-gray-50' : 'border-l-4 border-red-400'}`}>
                         <div className="flex items-center gap-4">
                             <div className={`p-3 rounded-full ${b.is_paid ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
                                 {b.is_paid ? <CheckCircle /> : <AlertCircle />}
@@ -81,7 +98,7 @@ export const BillsPage = () => {
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-4">
                             <span className="font-mono font-bold text-xl">${b.amount}</span>
                             <button 
                                 onClick={() => togglePaid(b)}
@@ -89,12 +106,20 @@ export const BillsPage = () => {
                             >
                                 {b.is_paid ? 'Mark Unpaid' : 'Mark Paid'}
                             </button>
-                                                        <button
-                                                            onClick={() => handleDelete(b.id)}
-                                                            className="text-gray-400 hover:text-red-500"
-                                                            aria-label={`Delete bill ${b.name}`}
-                                                            title={`Delete bill ${b.name}`}
-                                                        >
+                            <button
+                                onClick={() => handleOpenModal(b)}
+                                className="text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                aria-label={`Edit bill ${b.name}`}
+                                title="Edit bill"
+                            >
+                                <Edit2 size={18} />
+                            </button>
+                            <button
+                                onClick={() => handleDelete(b.id)}
+                                className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                aria-label={`Delete bill ${b.name}`}
+                                title="Delete bill"
+                            >
                                 <Trash2 size={18} />
                             </button>
                         </div>
@@ -105,7 +130,9 @@ export const BillsPage = () => {
              {showModal && (
                 <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
                     <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm">
-                        <h3 className="text-2xl font-bold mb-4 font-heading">Add Bill</h3>
+                        <h3 className="text-2xl font-bold mb-4 font-heading">
+                            {editingBill ? 'Edit Bill' : 'Add Bill'}
+                        </h3>
                         <form onSubmit={handleSave} className="space-y-3">
                              <label htmlFor="bill-name" className="block text-sm font-bold mb-1">Bill Name</label>
                              <input 
@@ -149,7 +176,9 @@ export const BillsPage = () => {
                             
                             <div className="flex gap-2 mt-4">
                                 <button type="button" onClick={() => setShowModal(false)} className="btn bg-gray-100 flex-1">Cancel</button>
-                                <button type="submit" className="btn bg-red-400 text-white flex-1">Save</button>
+                                <button type="submit" className="btn bg-red-400 text-white flex-1">
+                                    {editingBill ? 'Update' : 'Save'}
+                                </button>
                             </div>
                         </form>
                     </div>

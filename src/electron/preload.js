@@ -7,5 +7,11 @@ contextBridge.exposeInMainWorld('electron', {
     ipcRenderer.on(channel, subscription);
     return () => ipcRenderer.removeListener(channel, subscription);
   },
-  off: (channel, func) => ipcRenderer.removeListener(channel, func)
+  off: (channel, func) => ipcRenderer.removeListener(channel, func),
+  windowControl: {
+    minimize: () => ipcRenderer.invoke('window:minimize'),
+    toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),
+    close: () => ipcRenderer.invoke('window:close'),
+    isMaximized: () => ipcRenderer.invoke('window:isMaximized')
+  }
 });

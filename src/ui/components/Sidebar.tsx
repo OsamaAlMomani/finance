@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Receipt, PiggyBank, Target, CalendarDays, Settings } from 'lucide-react';
+import { LayoutDashboard, Receipt, PiggyBank, Target, CalendarDays, Settings, CreditCard, FileUp, ClipboardList, LogOut } from 'lucide-react';
 
 export const Sidebar = () => {
   const linkClass = ({ isActive }: { isActive: boolean }) => 
@@ -38,6 +38,18 @@ export const Sidebar = () => {
           <CalendarDays size={22} />
           <span>Bills</span>
         </NavLink>
+        <NavLink to="/loans" className={linkClass}>
+          <CreditCard size={22} />
+          <span>Loans</span>
+        </NavLink>
+        <NavLink to="/plans" className={linkClass}>
+          <ClipboardList size={22} />
+          <span>Plans</span>
+        </NavLink>
+        <NavLink to="/import-export" className={linkClass}>
+          <FileUp size={22} />
+          <span>Import/Export</span>
+        </NavLink>
       </nav>
 
       <div className="mt-auto">
@@ -45,6 +57,16 @@ export const Sidebar = () => {
           <Settings size={22} />
           <span>Settings</span>
         </NavLink>
+        <button
+          className={`${linkClass({ isActive: false })} w-full text-left`}
+          onClick={() => {
+            localStorage.removeItem('authUserId');
+            window.location.reload();
+          }}
+        >
+          <LogOut size={22} />
+          <span>Logout</span>
+        </button>
       </div>
     </div>
   );

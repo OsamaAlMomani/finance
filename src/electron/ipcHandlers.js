@@ -4,6 +4,7 @@ import * as dbService from '../services/databaseService.js';
 export function registerIpcHandlers() {
   // Accounts
   ipcMain.handle('db-get-accounts', () => dbService.getAccounts());
+  ipcMain.handle('db-get-accounts-with-balance', () => dbService.getAccountsWithBalance());
   ipcMain.handle('db-create-account', (e, account) => dbService.createAccount(account));
   ipcMain.handle('db-update-account', (e, account) => dbService.updateAccount(account));
   ipcMain.handle('db-delete-account', (e, id) => dbService.deleteAccount(id));
@@ -11,6 +12,7 @@ export function registerIpcHandlers() {
   // Transactions
   ipcMain.handle('db-get-transactions', (e, filter) => dbService.getTransactions(filter));
   ipcMain.handle('db-add-transaction', (e, tx) => dbService.addTransaction(tx));
+  ipcMain.handle('db-update-transaction', (e, tx) => dbService.updateTransaction(tx));
   ipcMain.handle('db-delete-transaction', (e, id) => dbService.deleteTransaction(id));
 
   // Dashboard
@@ -29,11 +31,30 @@ export function registerIpcHandlers() {
   // Goals
   ipcMain.handle('db-get-goals', () => dbService.getGoals());
   ipcMain.handle('db-save-goal', (e, goal) => dbService.saveGoal(goal));
+  ipcMain.handle('db-update-goal', (e, goal) => dbService.saveGoal(goal));
   ipcMain.handle('db-delete-goal', (e, id) => dbService.deleteGoal(id));
 
   // Bills
   ipcMain.handle('db-get-bills', () => dbService.getBills());
   ipcMain.handle('db-save-bill', (e, bill) => dbService.saveBill(bill));
   ipcMain.handle('db-delete-bill', (e, id) => dbService.deleteBill(id));
+
+  // Loans
+  ipcMain.handle('db-get-loans', () => dbService.getLoans());
+  ipcMain.handle('db-save-loan', (e, loan) => dbService.saveLoan(loan));
+  ipcMain.handle('db-delete-loan', (e, id) => dbService.deleteLoan(id));
+
+  // Plans
+  ipcMain.handle('db-get-plans', () => dbService.getPlans());
+  ipcMain.handle('db-save-plan', (e, plan) => dbService.savePlan(plan));
+  ipcMain.handle('db-delete-plan', (e, id) => dbService.deletePlan(id));
+
+  // Tax rules / App settings
+  ipcMain.handle('db-get-tax-rules', () => dbService.getTaxRules());
+  ipcMain.handle('db-get-app-settings', () => dbService.getAppSettings());
+
+  // Backup / Restore
+  ipcMain.handle('db-reset-all', () => dbService.resetAllData());
+  ipcMain.handle('db-restore-all', (e, payload) => dbService.restoreAllData(payload));
 }
 

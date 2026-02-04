@@ -2,8 +2,12 @@ import { useEffect, useState } from 'react';
 import { Trash2, PlusCircle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { CATEGORY_COLOR_OPTIONS, getCategoryColorClass } from '../utils/categoryColor';
+import { applyTheme } from '../utils/theme';
+import type { ThemeKey } from '../utils/theme';
+import { AvatarPicker } from '../components/AvatarPicker';
+import { getDefaultAvatar } from '../utils/avatars';
 
-type Theme = 'default' | 'girly' | 'men';
+type Theme = ThemeKey;
 
 interface Category {
   id: string;
@@ -13,10 +17,46 @@ interface Category {
   icon?: string;
 }
 
+interface UserProfile {
+  id: string;
+  name: string;
+  avatar?: string | null;
+}
+
 export const Settings = () => {
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'default');
   const [categories, setCategories] = useState<Category[]>([]);
   const [newCat, setNewCat] = useState({ name: '', type: 'expense', color: '#3B82F6' });
+  const [settings, setSettings] = useState({
+    currency: 'USD',
+    locale: 'en-US',
+    dateFormat: 'YYYY-MM-DD',
+    defaultAccountId: '',
+    defaultCategoryId: '',
+    defaultBudgetPeriod: 'monthly',
+    autoHideBalances: false,
+    enableNotifications: true,
+    backupReminderDays: 30
+  });
+  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
+  const [activeUser, setActiveUser] = useState<UserProfile | null>(null);
+
+  const loadSettings = async () => {
+    const raw = localStorage.getItem('appSettings');
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        setSettings(prev => ({ ...prev, ...parsed }));
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const saveSettings = (next: typeof settings) => {
+    setSettings(next);
+    localStorage.setItem('appSettings', JSON.stringify(next));
+  };
 
   const refreshCategories = async () => {
     if (window.electron) {
@@ -28,17 +68,30 @@ export const Settings = () => {
   useEffect(() => {
     if (!window.electron) return;
     window.electron.invoke('db-get-categories').then((cats) => setCategories(cats));
+    window.electron.invoke('db-get-accounts').then((accs) => setAccounts(accs));
+    window.electron.invoke('user-get-all').then((data) => {
+      const authUserId = localStorage.getItem('authUserId');
+      const user = data.users?.find((u: UserProfile) => u.id === authUserId)
+        || data.users?.find((u: UserProfile) => u.id === data.activeUserId);
+      setActiveUser(user || null);
+    });
+    loadSettings();
   }, []);
 
   useEffect(() => {
     localStorage.setItem('theme', theme);
-    document.body.classList.remove('girly-theme', 'men-theme');
-    if (theme === 'girly') document.body.classList.add('girly-theme');
-    if (theme === 'men') document.body.classList.add('men-theme');
+    applyTheme(theme);
   }, [theme]);
 
   const handleThemeChange = (t: Theme) => {
     setTheme(t);
+  };
+
+  const handleAvatarChange = async (avatar: string) => {
+    if (!window.electron || !activeUser) return;
+    const data = await window.electron.invoke('user-update-avatar', activeUser.id, avatar);
+    const updated = data.users?.find((u: UserProfile) => u.id === activeUser.id) || null;
+    setActiveUser(updated);
   };
 
   const handleAddCategory = async (e: React.FormEvent) => {
@@ -69,24 +122,198 @@ export const Settings = () => {
         <div className="flex gap-4 flex-wrap">
           <button 
             onClick={() => handleThemeChange('default')}
-            className={`btn ${theme === 'default' ? 'bg-gray-200 border-gray-400' : 'bg-white border-gray-200'}`}
+            className="btn theme-select-btn"
           >
             Default (Sketch)
           </button>
           
           <button 
             onClick={() => handleThemeChange('girly')}
-            className={`btn ${theme === 'girly' ? 'bg-pink-100 border-pink-300' : 'bg-white border-gray-200'}`}
+            className="btn theme-select-btn"
           >
-            Girly (Watercolor)
+            Female (Watercolor)
           </button>
           
           <button 
             onClick={() => handleThemeChange('men')}
-            className={`btn ${theme === 'men' ? 'bg-blue-100 border-blue-300' : 'bg-white border-gray-200'}`}
+            className="btn theme-select-btn"
           >
-            Men (Bold)
+            Male (Bold)
           </button>
+
+          <button 
+            onClick={() => handleThemeChange('dark')}
+            className="btn theme-select-btn"
+          >
+            Dark
+          </button>
+
+          <button 
+            onClick={() => handleThemeChange('light')}
+            className="btn theme-select-btn"
+          >
+            White
+          </button>
+
+          <button 
+            onClick={() => handleThemeChange('moonlight')}
+            className="btn theme-select-btn"
+          >
+            Moon Light
+          </button>
+
+          <button 
+            onClick={() => handleThemeChange('darknight')}
+            className="btn theme-select-btn"
+          >
+            Dark Night
+          </button>
+
+          <button 
+            onClick={() => handleThemeChange('sunshine')}
+            className="btn theme-select-btn"
+          >
+            Sunshine
+          </button>
+        </div>
+      </div>
+
+      <div className="card mb-8">
+        <h3 className="text-xl mb-4 font-bold">User Avatar</h3>
+        <AvatarPicker
+          label={activeUser ? `Avatar for ${activeUser.name}` : 'Avatar'}
+          value={activeUser?.avatar || getDefaultAvatar()}
+          onChange={handleAvatarChange}
+        />
+      </div>
+
+      <div className="card mb-8">
+        <h3 className="text-xl mb-4 font-bold">General Preferences</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="settings-currency" className="block text-sm font-bold mb-1">Currency</label>
+            <select
+              id="settings-currency"
+              className="w-full p-2 border rounded"
+              value={settings.currency}
+              onChange={e => saveSettings({ ...settings, currency: e.target.value })}
+              title="Currency"
+            >
+              <option value="USD">USD</option>
+              <option value="EUR">EUR</option>
+              <option value="GBP">GBP</option>
+              <option value="JOD">JOD</option>
+              <option value="SAR">SAR</option>
+              <option value="AED">AED</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="settings-locale" className="block text-sm font-bold mb-1">Locale</label>
+            <select
+              id="settings-locale"
+              className="w-full p-2 border rounded"
+              value={settings.locale}
+              onChange={e => saveSettings({ ...settings, locale: e.target.value })}
+              title="Locale"
+            >
+              <option value="en-US">English (US)</option>
+              <option value="en-GB">English (UK)</option>
+              <option value="ar-JO">Arabic (Jordan)</option>
+              <option value="ar-SA">Arabic (Saudi)</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="settings-date-format" className="block text-sm font-bold mb-1">Date Format</label>
+            <select
+              id="settings-date-format"
+              className="w-full p-2 border rounded"
+              value={settings.dateFormat}
+              onChange={e => saveSettings({ ...settings, dateFormat: e.target.value })}
+              title="Date format"
+            >
+              <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+              <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+              <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="settings-budget-period" className="block text-sm font-bold mb-1">Default Budget Period</label>
+            <select
+              id="settings-budget-period"
+              className="w-full p-2 border rounded"
+              value={settings.defaultBudgetPeriod}
+              onChange={e => saveSettings({ ...settings, defaultBudgetPeriod: e.target.value })}
+              title="Default budget period"
+            >
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="settings-default-account" className="block text-sm font-bold mb-1">Default Account</label>
+            <select
+              id="settings-default-account"
+              className="w-full p-2 border rounded"
+              value={settings.defaultAccountId}
+              onChange={e => saveSettings({ ...settings, defaultAccountId: e.target.value })}
+              title="Default account"
+            >
+              <option value="">None</option>
+              {accounts.map(a => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="settings-default-category" className="block text-sm font-bold mb-1">Default Category</label>
+            <select
+              id="settings-default-category"
+              className="w-full p-2 border rounded"
+              value={settings.defaultCategoryId}
+              onChange={e => saveSettings({ ...settings, defaultCategoryId: e.target.value })}
+              title="Default category"
+            >
+              <option value="">None</option>
+              {categories.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="card mb-8">
+        <h3 className="text-xl mb-4 font-bold">Privacy & Notifications</h3>
+        <div className="space-y-4">
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={settings.autoHideBalances}
+              onChange={e => saveSettings({ ...settings, autoHideBalances: e.target.checked })}
+            />
+            <span>Auto-hide balances on startup</span>
+          </label>
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={settings.enableNotifications}
+              onChange={e => saveSettings({ ...settings, enableNotifications: e.target.checked })}
+            />
+            <span>Enable notifications</span>
+          </label>
+          <div>
+            <label htmlFor="settings-backup-reminder" className="block text-sm font-bold mb-1">Backup Reminder (days)</label>
+            <input
+              id="settings-backup-reminder"
+              type="number"
+              min={1}
+              className="w-full p-2 border rounded"
+              value={settings.backupReminderDays}
+              onChange={e => saveSettings({ ...settings, backupReminderDays: Number(e.target.value) })}
+              title="Backup reminder days"
+            />
+          </div>
         </div>
       </div>
 
