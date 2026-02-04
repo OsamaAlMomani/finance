@@ -13,7 +13,6 @@ import {
   ReferenceLine
 } from 'recharts'
 import { useForecasts, useTransactions } from '../hooks/useFinanceData'
-import '../styles/InsightsForecaster.css'
 
 type ForecastMethod = 'sma' | 'ewma' | 'holt' | 'arima'
 type ScenarioType = 'optimistic' | 'baseline' | 'pessimistic'

@@ -1,6 +1,5 @@
 import { useTheme } from '../../contexts/ThemeContext'
 import { Palette } from 'lucide-react'
-import './ThemeToggle.css'
 
 type ToggleVariant = 'button' | 'switch' | 'dropdown'
 type ThemeId = 'theme-1' | 'theme-2' | 'theme-3' | 'theme-4' | 'theme-5' | 'theme-6' | 'theme-7'

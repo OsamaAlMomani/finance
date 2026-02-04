@@ -14,7 +14,6 @@ import {
 } from 'lucide-react'
 import Card, { StatCard } from '../components/common/Card'
 import AnimatedNumber, { CurrencyDisplay, TrendIndicator } from '../components/common/AnimatedNumber'
-import '../styles/OverviewEnhanced.css'
 
 /* ============================================
    FINANCE APP - ENHANCED OVERVIEW PAGE

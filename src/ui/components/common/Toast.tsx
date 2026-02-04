@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { X, CheckCircle, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 import { useNotification } from '../../contexts/NotificationContext';
 import type { Notification, NotificationType } from '../../contexts/NotificationContext';
-import './Toast.css';
 
 /* ============================================
    FINANCE APP - TOAST NOTIFICATION COMPONENT

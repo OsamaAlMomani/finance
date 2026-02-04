@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { getAnalyticsSettings, updateAnalyticsSettings, trackEvent } from '../services/analytics'
-import '../styles/Settings.css'
 
 export default function Settings() {
   const [analyticsEnabled, setAnalyticsEnabled] = useState(false)

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTransactions } from '../hooks/useFinanceData'
 import { X } from 'lucide-react'
-import '../styles/QuickAddModal.css'
 
 interface QuickAddModalProps {
   isOpen: boolean

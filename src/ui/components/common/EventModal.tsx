@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import './EventModal.css'
 
 interface TimelineEvent {
   id: string

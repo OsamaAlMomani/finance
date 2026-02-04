@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import './AnimatedNumber.css'
 
 interface AnimatedNumberProps {
   value: number

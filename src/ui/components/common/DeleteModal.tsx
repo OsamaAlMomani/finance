@@ -1,4 +1,3 @@
-import './DeleteModal.css'
 
 interface DeleteModalProps {
   isOpen: boolean

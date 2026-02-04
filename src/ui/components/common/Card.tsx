@@ -1,5 +1,4 @@
 import type { ReactNode, CSSProperties } from 'react'
-import './Card.css'
 
 export type CardVariant = 'default' | 'elevated' | 'glass' | 'gradient' | 'outline' | 'glow'
 export type CardColor = 'default' | 'primary' | 'success' | 'danger' | 'warning' | 'info'

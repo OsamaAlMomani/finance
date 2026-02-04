@@ -1,7 +1,4 @@
 /* Import Design System */
-@import './styles/design-system/variables.css';
-@import './styles/design-system/animations.css';
-@import './styles/design-system/utilities.css';
 
 #root {
   width: 100%;

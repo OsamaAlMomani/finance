@@ -2,7 +2,6 @@ import React from 'react';
 import { X, Keyboard } from 'lucide-react';
 import { useKeyboardShortcuts, formatShortcut } from '../../contexts/KeyboardShortcutsContext';
 import type { KeyboardShortcut } from '../../contexts/KeyboardShortcutsContext';
-import './KeyboardShortcutsHelp.css';
 
 /* ============================================
    FINANCE APP - KEYBOARD SHORTCUTS HELP MODAL

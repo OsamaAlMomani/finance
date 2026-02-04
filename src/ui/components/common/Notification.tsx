@@ -1,5 +1,4 @@
 import { useNotification } from '../../contexts/NotificationContext'
-import './Notification.css'
 
 export default function NotificationContainer() {
   const { notifications, removeNotification } = useNotification()

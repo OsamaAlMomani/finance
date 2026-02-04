@@ -16,7 +16,6 @@ import QuickAddModal from './QuickAddModal'
 import ThemeSelector from './common/ThemeSelector'
 import { useKeyboardShortcuts } from '../contexts/KeyboardShortcutsContext'
 import { trackEvent } from '../services/analytics'
-import '../styles/Layout.css'
 
 interface NavItem {
   id: string

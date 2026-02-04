@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { Target, Wallet, CalendarDays, Plus, Pencil, Trash2, CheckCircle, X } from 'lucide-react'
 import type { Budget, Bill, Goal, Transaction } from '../../services/database'
 import { useBudgets, useBills, useGoals, useTransactions } from '../hooks/useFinanceData'
-import '../styles/Plan.css'
 
 type TabKey = 'budgets' | 'bills' | 'goals'
 type ModalMode = 'add' | 'edit'

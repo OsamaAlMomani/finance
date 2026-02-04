@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { NotificationProvider } from './contexts/NotificationContext'
 import { KeyboardShortcutsProvider } from './contexts/KeyboardShortcutsContext'
-import './index.css'
+import '../styles/index.css'
 import App from './App.tsx'
 
 createRoot(document.getElementById('root')!).render(

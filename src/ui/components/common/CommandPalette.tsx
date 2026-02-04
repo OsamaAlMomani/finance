@@ -23,7 +23,6 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useNotification } from '../../contexts/NotificationContext';
-import './CommandPalette.css';
 
 interface Command {
   id: string;

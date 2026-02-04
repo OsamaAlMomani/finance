@@ -10,7 +10,6 @@ import { ToastContainer } from './components/common/Toast'
 import { KeyboardShortcutsHelp } from './components/common/KeyboardShortcutsHelp'
 import { CommandPalette } from './components/common'
 import { initAnalytics, trackEvent } from './services/analytics'
-import './App.css'
 
 function App() {
   const Router = window.location.protocol === 'file:' ? HashRouter : BrowserRouter
