@@ -145,12 +145,12 @@ function createWindow() {
     mainWindow.loadURL(devUrl);
 
     mainWindow.webContents.on('did-fail-load', () => {
-      mainWindow.loadFile(path.join(__dirname, '../../react-dist/index.html'));
+      mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
     });
 
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../../react-dist/index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
   }
 }
 
