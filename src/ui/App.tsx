@@ -16,11 +16,13 @@ import { PlansPage } from './pages/Plans';
 import { UsersPage } from './pages/Users';
 import { AuthPage } from './pages/Auth';
 import { ProfileSelectPage } from './pages/ProfileSelect';
+import { useI18n } from './contexts/useI18n';
 
 const App = () => {
   const [loggedIn, setLoggedIn] = useState<boolean>(false);
   const [profileReady, setProfileReady] = useState<boolean>(false);
   const [currentUserName, setCurrentUserName] = useState<string>('');
+  const { t } = useI18n();
 
   useEffect(() => {
     // Load theme
@@ -31,16 +33,16 @@ const App = () => {
   useEffect(() => {
     if (!window.electron?.on) return;
     const offTests = window.electron.on('app:run-tests', () => {
-      alert('Test shortcut triggered.');
+      alert(t('app.testShortcut'));
     });
     const offAbout = window.electron.on('app:show-about', () => {
-      alert('SketchBoard Finance Pro');
+      alert(t('app.aboutTitle'));
     });
     return () => {
       if (offTests) offTests();
       if (offAbout) offAbout();
     };
-  }, []);
+  }, [t]);
 
   return (
     <HashRouter>

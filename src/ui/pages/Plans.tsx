@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { PlusCircle, Trash2, Edit2 } from 'lucide-react';
+import { useI18n } from '../contexts/useI18n';
 
 type PlanItemType = 'transaction' | 'loan' | 'goal';
 
@@ -36,6 +37,7 @@ interface GoalItem {
 }
 
 export const PlansPage = () => {
+  const { t } = useI18n();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
   const [loans, setLoans] = useState<LoanItem[]>([]);
@@ -88,15 +90,15 @@ export const PlansPage = () => {
 
   const formatItemLabel = (item: TransactionItem | LoanItem | GoalItem) => {
     if ('merchant' in item) {
-      return `${item.merchant || 'Transaction'} (${item.date || 'n/a'}) - $${item.amount?.toFixed(2) || '0.00'}`;
+      return `${item.merchant || t('plans.planType.transaction')} (${item.date || t('common.notAvailable')}) - $${item.amount?.toFixed(2) || '0.00'}`;
     }
     if ('current_balance' in item) {
-      return `${item.name || 'Loan'} - $${item.current_balance?.toFixed(2) || '0.00'}`;
+      return `${item.name || t('plans.planType.loan')} - $${item.current_balance?.toFixed(2) || '0.00'}`;
     }
     if ('target_amount' in item) {
-      return `${item.name || 'Goal'} - $${item.target_amount?.toFixed(2) || '0.00'}`;
+      return `${item.name || t('plans.planType.goal')} - $${item.target_amount?.toFixed(2) || '0.00'}`;
     }
-    return 'Item';
+    return t('plans.item');
   };
 
   const renderTimeline = (label: string, steps: string[], colorClass: string) => {
@@ -163,20 +165,20 @@ export const PlansPage = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this plan?')) return;
+    if (!confirm(t('plans.deleteConfirm'))) return;
     if (!window.electron) return;
     await window.electron.invoke('db-delete-plan', id);
     loadData();
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <div>{t('common.loading')}</div>;
 
   return (
     <div className="h-full flex flex-col">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold font-heading">Plans</h2>
+        <h2 className="text-3xl font-bold font-heading">{t('plans.title')}</h2>
         <button onClick={() => handleOpenModal()} className="btn bg-indigo-500 text-white flex items-center gap-2">
-          <PlusCircle size={20} /> Create Plan
+          <PlusCircle size={20} /> {t('plans.create')}
         </button>
       </div>
 
@@ -187,24 +189,24 @@ export const PlansPage = () => {
               <div>
                 <h3 className="font-bold text-xl">{plan.title}</h3>
                 <p className="text-sm text-gray-500">
-                  Type: {plan.item_type} • Item ID: {plan.item_id}
+                  {t('plans.typeLabel')}: {plan.item_type} • {t('plans.itemId')}: {plan.item_id}
                 </p>
-                <p className="text-xs text-gray-400">Plan ID: {plan.id}</p>
+                <p className="text-xs text-gray-400">{t('plans.planId')}: {plan.id}</p>
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={() => handleOpenModal(plan)}
                   className="text-blue-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                  aria-label={`Edit plan ${plan.title}`}
-                  title="Edit plan"
+                  aria-label={`${t('common.edit')} ${plan.title}`}
+                  title={t('common.edit')}
                 >
                   <Edit2 size={14} />
                 </button>
                 <button
                   onClick={() => handleDelete(plan.id)}
                   className="text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                  aria-label={`Delete plan ${plan.title}`}
-                  title="Delete plan"
+                  aria-label={`${t('common.delete')} ${plan.title}`}
+                  title={t('common.delete')}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -214,46 +216,46 @@ export const PlansPage = () => {
             <div className="text-sm text-gray-700 space-y-2">
               {plan.scenario_if && (
                 <div>
-                  <span className="font-bold">If I did this:</span>
+                  <span className="font-bold">{t('plans.scenarioIf')}</span>
                   <p>{plan.scenario_if}</p>
                 </div>
               )}
               {plan.scenario_else && (
                 <div>
-                  <span className="font-bold">But if I did this:</span>
+                  <span className="font-bold">{t('plans.scenarioElse')}</span>
                   <p>{plan.scenario_else}</p>
                 </div>
               )}
               {plan.what_if && (
                 <div>
-                  <span className="font-bold">What if:</span>
+                  <span className="font-bold">{t('plans.whatIf')}</span>
                   <p>{plan.what_if}</p>
                 </div>
               )}
               {plan.outcome && (
                 <div>
-                  <span className="font-bold">What will happen:</span>
+                  <span className="font-bold">{t('plans.outcome')}</span>
                   <p>{plan.outcome}</p>
                 </div>
               )}
             </div>
 
             {renderTimeline(
-              'Scenario A (If I did this)',
+              t('plans.scenarioA'),
               [plan.scenario_if, plan.outcome].filter(Boolean) as string[],
               'bg-green-500'
             )}
 
             {renderTimeline(
-              'Scenario B (But if I did this)',
+              t('plans.scenarioB'),
               [plan.scenario_else, plan.what_if].filter(Boolean) as string[],
               'bg-orange-500'
             )}
 
             <div className="mt-4">
               <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
-                <span>On time</span>
-                <span>Exceeding months</span>
+                <span>{t('plans.onTime')}</span>
+                <span>{t('plans.exceedingMonths')}</span>
               </div>
               <div className="flex items-center gap-1">
                 {Array.from({ length: 13 }).map((_, idx) => {
@@ -270,7 +272,7 @@ export const PlansPage = () => {
                             ? 'bg-red-200 border-red-300'
                             : 'bg-gray-200 border-gray-300'
                         }`}
-                        title={`${idx} month(s) overdue`}
+                        title={t('plans.monthOverdueTitle', { count: idx })}
                       />
                       {idx < 12 && <div className="w-4 h-[2px] bg-gray-200" />}
                     </div>
@@ -278,7 +280,7 @@ export const PlansPage = () => {
                 })}
               </div>
               <div className="text-xs text-red-600 mt-1">
-                {plan.months_overdue || 0} month(s) exceeded
+                {t('plans.monthsExceeded', { count: plan.months_overdue || 0 })}
               </div>
             </div>
           </div>
@@ -286,7 +288,7 @@ export const PlansPage = () => {
 
         {plans.length === 0 && (
           <div className="col-span-2 text-center py-12 text-gray-400 border-2 border-dashed border-gray-300 rounded-xl">
-            <p className="text-xl font-hand">No plans yet. Create one to simulate outcomes.</p>
+            <p className="text-xl font-hand">{t('plans.empty')}</p>
           </div>
         )}
       </div>
@@ -295,11 +297,11 @@ export const PlansPage = () => {
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-2xl border-2 border-gray-200 max-h-[90vh] overflow-y-auto">
             <h3 className="text-2xl font-bold mb-4 font-heading">
-              {editingPlan ? 'Edit Plan' : 'Create Plan'}
+              {editingPlan ? t('plans.edit') : t('plans.createTitle')}
             </h3>
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <label htmlFor="plan-id" className="block text-sm font-bold mb-1">Plan ID</label>
+                <label htmlFor="plan-id" className="block text-sm font-bold mb-1">{t('plans.planIdLabel')}</label>
                 <div className="flex gap-2">
                   <input
                     id="plan-id"
@@ -314,7 +316,7 @@ export const PlansPage = () => {
                       onClick={() => setPlanForm({ ...planForm, id: uuidv4() })}
                       className="btn bg-gray-100"
                     >
-                      Generate
+                      {t('common.generate')}
                     </button>
                   )}
                 </div>
@@ -322,7 +324,7 @@ export const PlansPage = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="plan-type" className="block text-sm font-bold mb-1">Plan Type</label>
+                  <label htmlFor="plan-type" className="block text-sm font-bold mb-1">{t('plans.planType')}</label>
                   <select
                     id="plan-type"
                     className="w-full p-2 border rounded font-hand text-lg"
@@ -337,13 +339,13 @@ export const PlansPage = () => {
                       });
                     }}
                   >
-                    <option value="transaction">Transaction</option>
-                    <option value="loan">Loan</option>
-                    <option value="goal">Goal</option>
+                    <option value="transaction">{t('plans.planType.transaction')}</option>
+                    <option value="loan">{t('plans.planType.loan')}</option>
+                    <option value="goal">{t('plans.planType.goal')}</option>
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="plan-item" className="block text-sm font-bold mb-1">Item</label>
+                  <label htmlFor="plan-item" className="block text-sm font-bold mb-1">{t('plans.item')}</label>
                   <select
                     id="plan-item"
                     className="w-full p-2 border rounded font-hand text-lg"
@@ -355,16 +357,18 @@ export const PlansPage = () => {
                       <option key={item.id} value={item.id}>{formatItemLabel(item)}</option>
                     ))}
                   </select>
-                  <p className="text-xs text-gray-500 mt-1">Selected Item ID: {planForm.item_id || 'N/A'}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {t('plans.selectedItemId', { id: planForm.item_id || t('common.notAvailable') })}
+                  </p>
                 </div>
               </div>
 
               <div>
-                <label htmlFor="plan-title" className="block text-sm font-bold mb-1">Title</label>
+                <label htmlFor="plan-title" className="block text-sm font-bold mb-1">{t('plans.titleLabel')}</label>
                 <input
                   id="plan-title"
                   className="w-full p-2 border rounded font-hand text-lg"
-                  placeholder="e.g. Pay extra $200 monthly"
+                  placeholder={t('plans.titlePlaceholder')}
                   required
                   value={planForm.title}
                   onChange={e => setPlanForm({ ...planForm, title: e.target.value })}
@@ -372,7 +376,7 @@ export const PlansPage = () => {
               </div>
 
               <div>
-                <label htmlFor="plan-if" className="block text-sm font-bold mb-1">If I did this</label>
+                <label htmlFor="plan-if" className="block text-sm font-bold mb-1">{t('plans.ifLabel')}</label>
                 <textarea
                   id="plan-if"
                   className="w-full p-2 border rounded font-hand text-lg"
@@ -383,7 +387,7 @@ export const PlansPage = () => {
               </div>
 
               <div>
-                <label htmlFor="plan-else" className="block text-sm font-bold mb-1">But if I did this</label>
+                <label htmlFor="plan-else" className="block text-sm font-bold mb-1">{t('plans.elseLabel')}</label>
                 <textarea
                   id="plan-else"
                   className="w-full p-2 border rounded font-hand text-lg"
@@ -394,7 +398,7 @@ export const PlansPage = () => {
               </div>
 
               <div>
-                <label htmlFor="plan-whatif" className="block text-sm font-bold mb-1">What if</label>
+                <label htmlFor="plan-whatif" className="block text-sm font-bold mb-1">{t('plans.whatIfLabel')}</label>
                 <textarea
                   id="plan-whatif"
                   className="w-full p-2 border rounded font-hand text-lg"
@@ -405,7 +409,7 @@ export const PlansPage = () => {
               </div>
 
               <div>
-                <label htmlFor="plan-outcome" className="block text-sm font-bold mb-1">What will happen</label>
+                <label htmlFor="plan-outcome" className="block text-sm font-bold mb-1">{t('plans.outcomeLabel')}</label>
                 <textarea
                   id="plan-outcome"
                   className="w-full p-2 border rounded font-hand text-lg"
@@ -416,7 +420,7 @@ export const PlansPage = () => {
               </div>
 
               <div>
-                <label htmlFor="plan-months" className="block text-sm font-bold mb-1">Months exceeded</label>
+                <label htmlFor="plan-months" className="block text-sm font-bold mb-1">{t('plans.monthsExceededLabel')}</label>
                 <input
                   id="plan-months"
                   type="number"
@@ -425,15 +429,15 @@ export const PlansPage = () => {
                   value={planForm.months_overdue || 0}
                   onChange={e => setPlanForm({ ...planForm, months_overdue: Number(e.target.value) })}
                 />
-                <p className="text-xs text-gray-500 mt-1">This moves the red dot on the timeline bar.</p>
+                <p className="text-xs text-gray-500 mt-1">{t('plans.timelineHint')}</p>
               </div>
 
               <div className="flex gap-4 pt-4">
                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 btn bg-gray-100">
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button type="submit" className="flex-1 btn bg-indigo-500 text-white">
-                  {editingPlan ? 'Update Plan' : 'Create Plan'}
+                  {editingPlan ? t('plans.update') : t('plans.createTitle')}
                 </button>
               </div>
             </form>

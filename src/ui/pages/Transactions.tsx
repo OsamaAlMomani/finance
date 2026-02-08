@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { PlusCircle, Search, Filter, Trash2, Edit2, X } from 'lucide-react';
 import { getCategoryColorClass } from '../utils/categoryColor';
+import { useI18n } from '../contexts/useI18n';
 
 interface Transaction {
   id: string;
@@ -33,6 +34,7 @@ interface Account {
 type TransactionType = Transaction['type'];
 
 export const Transactions = () => {
+  const { t } = useI18n();
   const [data, setData] = useState<Transaction[]>([]);
   const [filteredData, setFilteredData] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -199,20 +201,20 @@ export const Transactions = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this transaction?")) return;
+    if (!confirm(t('transactions.deleteConfirm'))) return;
     if (!window.electron) return;
     await window.electron.invoke('db-delete-transaction', id);
     loadData();
   };
 
-  if (loading) return <div className="p-4">Loading transactions...</div>;
+  if (loading) return <div className="p-4">{t('transactions.loading')}</div>;
 
   return (
     <div className="h-full flex flex-col">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold font-heading">Transactions</h2>
+        <h2 className="text-3xl font-bold font-heading">{t('transactions.title')}</h2>
         <button onClick={() => handleOpenModal()} className="btn bg-blue-500 text-white flex items-center gap-2">
-          <PlusCircle size={20} /> Add New
+          <PlusCircle size={20} /> {t('transactions.addNew')}
         </button>
       </div>
 
@@ -224,8 +226,12 @@ export const Transactions = () => {
               <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
             </span>
             <div className="text-sm text-red-700">
-              Import update: {importNotice.success} added, {importNotice.updated} updated, {importNotice.failed} failed
-              {importNotice.type === 'transactions' ? '' : ' (non-transaction import)'}
+              {t('transactions.importUpdate', {
+                success: importNotice.success,
+                updated: importNotice.updated,
+                failed: importNotice.failed
+              })}
+              {importNotice.type === 'transactions' ? '' : t('transactions.importNonTx')}
             </div>
           </div>
           <button
@@ -235,7 +241,7 @@ export const Transactions = () => {
               setImportNotice(null);
             }}
           >
-            Dismiss
+            {t('transactions.dismiss')}
           </button>
         </div>
       )}
@@ -246,9 +252,9 @@ export const Transactions = () => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
             <input
               type="text"
-              placeholder="Search transactions..."
+              placeholder={t('transactions.searchPlaceholder')}
               className="pl-10 p-2 w-full border rounded-md"
-              aria-label="Search transactions"
+              aria-label={t('transactions.searchPlaceholder')}
               value={searchText}
               onChange={e => setSearchText(e.target.value)}
             />
@@ -257,7 +263,7 @@ export const Transactions = () => {
           onClick={() => setShowFilterPanel(!showFilterPanel)}
           className={`btn flex items-center gap-2 ${showFilterPanel ? 'bg-blue-100 border-blue-300' : 'bg-gray-100'}`}
         >
-          <Filter size={18} /> Filter
+          <Filter size={18} /> {t('common.filter')}
         </button>
       </div>
 
@@ -265,47 +271,47 @@ export const Transactions = () => {
       {showFilterPanel && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
           <div className="flex justify-between items-center mb-3">
-            <h3 className="font-bold text-sm">Filter Options</h3>
+            <h3 className="font-bold text-sm">{t('transactions.filterOptions')}</h3>
             <button 
               onClick={() => setShowFilterPanel(false)} 
               className="text-gray-400 hover:text-gray-600"
-              aria-label="Close filter panel"
-              title="Close filter panel"
+              aria-label={t('transactions.closeFilter')}
+              title={t('transactions.closeFilter')}
             >
               <X size={18} />
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label htmlFor="filter-account" className="block text-xs font-bold mb-1">Account</label>
+              <label htmlFor="filter-account" className="block text-xs font-bold mb-1">{t('common.account')}</label>
               <select
                 id="filter-account"
                 className="w-full p-2 border rounded"
                 value={filterAccount}
                 onChange={e => setFilterAccount(e.target.value)}
               >
-                <option value="">All Accounts</option>
+                <option value="">{t('transactions.allAccounts')}</option>
                 {accounts.map(a => (
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label htmlFor="filter-type" className="block text-xs font-bold mb-1">Transaction Type</label>
+              <label htmlFor="filter-type" className="block text-xs font-bold mb-1">{t('transactions.transactionType')}</label>
               <select
                 id="filter-type"
                 className="w-full p-2 border rounded"
                 value={filterType}
                 onChange={e => setFilterType(e.target.value)}
               >
-                <option value="">All Types</option>
-                <option value="expense">Expense</option>
-                <option value="income">Income</option>
-                <option value="transfer">Transfer</option>
+                <option value="">{t('transactions.allTypes')}</option>
+                <option value="expense">{t('transactions.expense')}</option>
+                <option value="income">{t('transactions.income')}</option>
+                <option value="transfer">{t('transactions.transfer')}</option>
               </select>
             </div>
             <div>
-              <label htmlFor="filter-start-date" className="block text-xs font-bold mb-1">Start Date</label>
+              <label htmlFor="filter-start-date" className="block text-xs font-bold mb-1">{t('transactions.startDate')}</label>
               <input
                 id="filter-start-date"
                 type="date"
@@ -315,7 +321,7 @@ export const Transactions = () => {
               />
             </div>
             <div>
-              <label htmlFor="filter-end-date" className="block text-xs font-bold mb-1">End Date</label>
+              <label htmlFor="filter-end-date" className="block text-xs font-bold mb-1">{t('transactions.endDate')}</label>
               <input
                 id="filter-end-date"
                 type="date"
@@ -335,7 +341,7 @@ export const Transactions = () => {
                 }}
                 className="btn bg-white w-full"
               >
-                Clear All Filters
+                {t('transactions.clearFilters')}
               </button>
             </div>
           </div>
@@ -347,11 +353,11 @@ export const Transactions = () => {
           <table className="w-full text-left border-collapse">
             <thead className="bg-gray-50 sticky top-0">
               <tr>
-                <th className="p-4 border-b">Date</th>
-                <th className="p-4 border-b">Merchant / Description</th>
-                <th className="p-4 border-b">Account</th>
-                <th className="p-4 border-b">Category</th>
-                <th className="p-4 border-b text-right">Amount</th>
+                <th className="p-4 border-b">{t('transactions.table.date')}</th>
+                <th className="p-4 border-b">{t('transactions.table.merchant')}</th>
+                <th className="p-4 border-b">{t('transactions.table.account')}</th>
+                <th className="p-4 border-b">{t('transactions.table.category')}</th>
+                <th className="p-4 border-b text-right">{t('transactions.table.amount')}</th>
                 <th className="p-4 border-b w-[80px]"></th>
               </tr>
             </thead>
@@ -380,7 +386,7 @@ export const Transactions = () => {
                     <span 
                       className={`px-3 py-1 rounded-full text-sm font-bold category-pill ${getCategoryColorClass(tx.category_color)}`}
                     >
-                      {tx.category_name || 'Uncategorized'}
+                      {tx.category_name || t('transactions.uncategorized')}
                     </span>
                   </td>
                   <td className={`p-4 text-right font-bold font-mono ${tx.type === 'income' ? 'text-green-600' : tx.type === 'transfer' ? 'text-blue-600' : 'text-red-600'}`}>
@@ -391,16 +397,16 @@ export const Transactions = () => {
                       <button 
                           onClick={() => handleOpenModal(tx)}
                           className="text-blue-400 hover:text-blue-600"
-                        aria-label={`Edit transaction ${tx.merchant}`}
-                        title="Edit transaction"
+                        aria-label={`${t('common.edit')} ${tx.merchant}`}
+                        title={t('common.edit')}
                       >
                           <Edit2 size={18} />
                       </button>
                       <button 
                           onClick={() => handleDelete(tx.id)}
                           className="text-red-400 hover:text-red-600"
-                        aria-label={`Delete transaction ${tx.merchant}`}
-                        title="Delete transaction"
+                        aria-label={`${t('common.delete')} ${tx.merchant}`}
+                        title={t('common.delete')}
                       >
                           <Trash2 size={18} />
                       </button>
@@ -411,7 +417,7 @@ export const Transactions = () => {
               {filteredData.length === 0 && (
                 <tr>
                     <td colSpan={6} className="p-8 text-center text-gray-400">
-                      {data.length === 0 ? 'No transactions found.' : 'No transactions match your filters.'}
+                      {data.length === 0 ? t('transactions.noData') : t('transactions.noMatch')}
                     </td>
                 </tr>
               )}
@@ -424,13 +430,13 @@ export const Transactions = () => {
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-md border-2 border-gray-200">
             <h3 className="text-2xl font-bold mb-4 font-heading">
-              {editingTx ? 'Edit Transaction' : 'Add Transaction'}
+              {editingTx ? t('transactions.editTitle') : t('transactions.addTitle')}
             </h3>
             <form onSubmit={handleSave} className="space-y-4">
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                   <label htmlFor="tx-type" className="block text-sm font-bold mb-1">Type</label>
+                   <label htmlFor="tx-type" className="block text-sm font-bold mb-1">{t('transactions.type')}</label>
                    <select 
                      id="tx-type"
                      className="w-full p-2 border rounded font-hand text-lg" 
@@ -441,13 +447,13 @@ export const Transactions = () => {
                        setNewTx({...newTx, type: newType, category: matchingCategory});
                      }}
                    >
-                     <option value="expense">Expense</option>
-                     <option value="income">Income</option>
-                     <option value="transfer">Transfer</option>
+                     <option value="expense">{t('transactions.expense')}</option>
+                     <option value="income">{t('transactions.income')}</option>
+                     <option value="transfer">{t('transactions.transfer')}</option>
                    </select>
                 </div>
                 <div>
-                  <label htmlFor="tx-date" className="block text-sm font-bold mb-1">Date</label>
+                  <label htmlFor="tx-date" className="block text-sm font-bold mb-1">{t('transactions.date')}</label>
                   <input 
                     id="tx-date"
                     type="date" 
@@ -460,13 +466,13 @@ export const Transactions = () => {
               </div>
 
               <div>
-                <label htmlFor="tx-amount" className="block text-sm font-bold mb-1">Amount</label>
+                <label htmlFor="tx-amount" className="block text-sm font-bold mb-1">{t('transactions.amount')}</label>
                 <input 
                   id="tx-amount"
                   type="number" 
                   step="0.01" 
                   required
-                  placeholder="0.00"
+                  placeholder={t('transactions.amountPlaceholder')}
                   className="w-full p-2 border rounded font-hand text-xl"
                   value={newTx.amount}
                   onChange={e => setNewTx({...newTx, amount: e.target.value})}
@@ -474,13 +480,13 @@ export const Transactions = () => {
               </div>
 
               <div>
-                <label htmlFor="tx-merchant" className="block text-sm font-bold mb-1">Merchant / Payee</label>
+                <label htmlFor="tx-merchant" className="block text-sm font-bold mb-1">{t('transactions.merchant')}</label>
                 <input 
                   id="tx-merchant"
                   type="text" 
                   required
                   className="w-full p-2 border rounded font-hand text-lg"
-                  placeholder="e.g. Starbucks, Salary"
+                  placeholder={t('transactions.merchantPlaceholder')}
                   value={newTx.merchant}
                   onChange={e => setNewTx({...newTx, merchant: e.target.value})}
                 />
@@ -488,7 +494,7 @@ export const Transactions = () => {
 
               {newTx.type !== 'transfer' && (
                 <div>
-                  <label htmlFor="tx-category" className="block text-sm font-bold mb-1">Category</label>
+                  <label htmlFor="tx-category" className="block text-sm font-bold mb-1">{t('common.category')}</label>
                   <select 
                     id="tx-category"
                     className="w-full p-2 border rounded font-hand text-lg"
@@ -503,14 +509,16 @@ export const Transactions = () => {
                       ))}
                   </select>
                   {categories.filter(c => c.type === newTx.type).length === 0 && (
-                    <p className="text-sm text-red-500 mt-1">No {newTx.type} categories available. Please create one first.</p>
+                    <p className="text-sm text-red-500 mt-1">
+                      {t('transactions.noCategories', { type: newTx.type })}
+                    </p>
                   )}
                 </div>
               )}
 
               <div>
                 <label htmlFor="tx-account" className="block text-sm font-bold mb-1">
-                  {newTx.type === 'transfer' ? 'From Account' : 'Account'}
+                  {newTx.type === 'transfer' ? t('transactions.fromAccount') : t('common.account')}
                 </label>
                  <select 
                   id="tx-account"
@@ -518,7 +526,7 @@ export const Transactions = () => {
                     value={newTx.account}
                     onChange={e => setNewTx({...newTx, account: e.target.value})}
                 >
-                    <option value="">Select Account...</option>
+                    <option value="">{t('common.selectAccount')}</option>
                     {accounts.map(a => (
                         <option key={a.id} value={a.id}>{a.name}</option>
                     ))}
@@ -527,7 +535,7 @@ export const Transactions = () => {
 
               {newTx.type === 'transfer' && (
                 <div>
-                  <label htmlFor="tx-to-account" className="block text-sm font-bold mb-1">To Account</label>
+                  <label htmlFor="tx-to-account" className="block text-sm font-bold mb-1">{t('common.toAccount')}</label>
                   <select 
                     id="tx-to-account"
                     className="w-full p-2 border rounded font-hand text-lg"
@@ -535,7 +543,7 @@ export const Transactions = () => {
                     onChange={e => setNewTx({...newTx, toAccount: e.target.value})}
                     required
                   >
-                    <option value="">Select Destination Account...</option>
+                    <option value="">{t('common.selectDestinationAccount')}</option>
                     {accounts.filter(a => a.id !== newTx.account).map(a => (
                       <option key={a.id} value={a.id}>{a.name}</option>
                     ))}
@@ -544,21 +552,21 @@ export const Transactions = () => {
               )}
 
               <div>
-                <label htmlFor="tx-notes" className="block text-sm font-bold mb-1">Notes</label>
+                <label htmlFor="tx-notes" className="block text-sm font-bold mb-1">{t('transactions.notes')}</label>
                 <textarea 
                   id="tx-notes"
                   className="w-full p-2 border rounded font-hand text-lg"
                   rows={2}
-                  placeholder="Optional notes"
+                  placeholder={t('transactions.notesPlaceholder')}
                   value={newTx.notes}
                   onChange={e => setNewTx({...newTx, notes: e.target.value})}
                 />
               </div>
 
               <div className="flex gap-4 pt-4">
-                <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 btn bg-gray-100">Cancel</button>
+                <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 btn bg-gray-100">{t('common.cancel')}</button>
                 <button type="submit" className="flex-1 btn bg-blue-500 text-white">
-                  {editingTx ? 'Update' : 'Save'}
+                  {editingTx ? t('common.update') : t('common.save')}
                 </button>
               </div>
             </form>

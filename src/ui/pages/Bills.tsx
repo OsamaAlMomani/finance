@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Calendar, CheckCircle, Clock, AlertCircle, Trash2, Edit2 } from 'lucide-react';
+import { useI18n } from '../contexts/useI18n';
 
 interface Bill {
   id: string;
@@ -13,6 +14,7 @@ interface Bill {
 }
 
 export const BillsPage = () => {
+    const { t } = useI18n();
     const [bills, setBills] = useState<Bill[]>([]);
     const [showModal, setShowModal] = useState(false);
     const [editingBill, setEditingBill] = useState<Bill | null>(null);
@@ -68,7 +70,7 @@ export const BillsPage = () => {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm("Delete this bill?")) return;
+        if (!confirm(t('bills.deleteConfirm'))) return;
         if (!window.electron) return;
         await window.electron.invoke('db-delete-bill', id);
         loadBills();
@@ -77,9 +79,9 @@ export const BillsPage = () => {
     return (
         <div className="h-full">
              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-3xl font-bold font-heading">Upcoming Bills</h2>
+                <h2 className="text-3xl font-bold font-heading">{t('bills.title')}</h2>
                 <button onClick={() => handleOpenModal()} className="btn bg-red-400 text-white flex items-center gap-2">
-                    <Calendar size={20} /> Add Bill
+                    <Calendar size={20} /> {t('bills.add')}
                 </button>
             </div>
 
@@ -93,7 +95,7 @@ export const BillsPage = () => {
                             <div>
                                 <h3 className={`font-bold text-lg ${b.is_paid ? 'line-through text-gray-500' : ''}`}>{b.name}</h3>
                                 <p className="text-sm text-gray-400 flex items-center gap-1">
-                                    <Clock size={14} /> Due: {b.next_due_date} ({b.recurrence})
+                                    <Clock size={14} /> {t('bills.due')}: {b.next_due_date} ({b.recurrence})
                                 </p>
                             </div>
                         </div>
@@ -104,21 +106,21 @@ export const BillsPage = () => {
                                 onClick={() => togglePaid(b)}
                                 className={`btn text-sm ${b.is_paid ? 'bg-gray-200' : 'bg-green-500 text-white'}`}
                             >
-                                {b.is_paid ? 'Mark Unpaid' : 'Mark Paid'}
+                                {b.is_paid ? t('bills.markUnpaid') : t('bills.markPaid')}
                             </button>
                             <button
                                 onClick={() => handleOpenModal(b)}
                                 className="text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                aria-label={`Edit bill ${b.name}`}
-                                title="Edit bill"
+                                aria-label={`${t('common.edit')} ${b.name}`}
+                                title={t('common.edit')}
                             >
                                 <Edit2 size={18} />
                             </button>
                             <button
                                 onClick={() => handleDelete(b.id)}
                                 className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                aria-label={`Delete bill ${b.name}`}
-                                title="Delete bill"
+                                aria-label={`${t('common.delete')} ${b.name}`}
+                                title={t('common.delete')}
                             >
                                 <Trash2 size={18} />
                             </button>
@@ -131,29 +133,29 @@ export const BillsPage = () => {
                 <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
                     <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm">
                         <h3 className="text-2xl font-bold mb-4 font-heading">
-                            {editingBill ? 'Edit Bill' : 'Add Bill'}
+                            {editingBill ? t('bills.edit') : t('bills.addTitle')}
                         </h3>
                         <form onSubmit={handleSave} className="space-y-3">
-                             <label htmlFor="bill-name" className="block text-sm font-bold mb-1">Bill Name</label>
+                             <label htmlFor="bill-name" className="block text-sm font-bold mb-1">{t('bills.billName')}</label>
                              <input 
                                 id="bill-name"
                                 className="w-full p-2 border rounded font-hand text-lg" 
-                                placeholder="Bill Name (e.g. Rent)" 
+                                placeholder={t('bills.billNamePlaceholder')}
                                 required
                                 value={newBill.name}
                                 onChange={e => setNewBill({...newBill, name: e.target.value})}
                             />
-                             <label htmlFor="bill-amount" className="block text-sm font-bold mb-1">Amount</label>
+                             <label htmlFor="bill-amount" className="block text-sm font-bold mb-1">{t('bills.amount')}</label>
                              <input 
                                 id="bill-amount"
                                 className="w-full p-2 border rounded font-hand text-lg" 
                                 type="number" step="0.01"
-                                placeholder="Amount" 
+                                placeholder={t('bills.amountPlaceholder')}
                                 required
                                 value={newBill.amount}
                                 onChange={e => setNewBill({...newBill, amount: e.target.value})}
                             />
-                            <label htmlFor="bill-date" className="block text-sm font-bold mb-1">Due Date</label>
+                            <label htmlFor="bill-date" className="block text-sm font-bold mb-1">{t('bills.dueDate')}</label>
                             <input 
                                 id="bill-date"
                                 className="w-full p-2 border rounded font-hand text-lg" 
@@ -162,22 +164,22 @@ export const BillsPage = () => {
                                 value={newBill.date}
                                 onChange={e => setNewBill({...newBill, date: e.target.value})}
                             />
-                            <label htmlFor="bill-recurrence" className="block text-sm font-bold mb-1">Recurrence</label>
+                            <label htmlFor="bill-recurrence" className="block text-sm font-bold mb-1">{t('bills.recurrence')}</label>
                             <select 
                                 id="bill-recurrence"
                                 className="w-full p-2 border rounded font-hand text-lg" 
                                 value={newBill.recur}
                                 onChange={e => setNewBill({...newBill, recur: e.target.value})}
                             >
-                                <option value="weekly">Weekly</option>
-                                <option value="monthly">Monthly</option>
-                                <option value="yearly">Yearly</option>
+                                <option value="weekly">{t('bills.recurrence.weekly')}</option>
+                                <option value="monthly">{t('bills.recurrence.monthly')}</option>
+                                <option value="yearly">{t('bills.recurrence.yearly')}</option>
                             </select>
                             
                             <div className="flex gap-2 mt-4">
-                                <button type="button" onClick={() => setShowModal(false)} className="btn bg-gray-100 flex-1">Cancel</button>
+                                <button type="button" onClick={() => setShowModal(false)} className="btn bg-gray-100 flex-1">{t('common.cancel')}</button>
                                 <button type="submit" className="btn bg-red-400 text-white flex-1">
-                                    {editingBill ? 'Update' : 'Save'}
+                                    {editingBill ? t('common.update') : t('bills.save')}
                                 </button>
                             </div>
                         </form>

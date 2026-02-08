@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import './EventModal.css'
+import { useI18n } from '../../contexts/useI18n'
 
 interface TimelineEvent {
   id: string
@@ -28,6 +29,7 @@ export default function EventModal({
   categories,
   iconOptions
 }: EventModalProps) {
+  const { t } = useI18n()
   const [formData, setFormData] = useState<Omit<TimelineEvent, 'id'>>({
     title: '',
     date: new Date().toISOString().split('T')[0],
@@ -103,19 +105,19 @@ export default function EventModal({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>{event ? 'Edit Event' : 'Add New Event'}</h3>
-          <button className="modal-close" onClick={onClose} aria-label="Close event modal" title="Close">
+          <h3>{event ? t('event.modal.editTitle') : t('event.modal.addTitle')}</h3>
+          <button className="modal-close" onClick={onClose} aria-label={t('event.modal.close')} title={t('common.close')}>
             <i className="fas fa-times"></i>
           </button>
         </div>
 
         <form className="modal-body" onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="eventTitle">Event Title *</label>
+            <label htmlFor="eventTitle">{t('event.title')}</label>
             <input
               id="eventTitle"
               type="text"
-              placeholder="Enter event title"
+              placeholder={t('event.titlePlaceholder')}
               value={formData.title}
               onChange={e => setFormData({ ...formData, title: e.target.value })}
               className="form-control"
@@ -126,7 +128,7 @@ export default function EventModal({
 
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="eventDate">Date *</label>
+              <label htmlFor="eventDate">{t('event.date')}</label>
               <input
                 id="eventDate"
                 type="date"
@@ -137,7 +139,7 @@ export default function EventModal({
               />
             </div>
             <div className="form-group">
-              <label htmlFor="eventCategory">Category *</label>
+              <label htmlFor="eventCategory">{t('event.category')}</label>
               <select
                 id="eventCategory"
                 value={formData.category}
@@ -153,10 +155,10 @@ export default function EventModal({
           </div>
 
           <div className="form-group">
-            <label htmlFor="eventDescription">Description</label>
+            <label htmlFor="eventDescription">{t('event.description')}</label>
             <textarea
               id="eventDescription"
-              placeholder="Describe your event..."
+              placeholder={t('event.descriptionPlaceholder')}
               value={formData.description}
               onChange={e => setFormData({ ...formData, description: e.target.value })}
               className="form-control"
@@ -165,7 +167,7 @@ export default function EventModal({
           </div>
 
           <div className="form-group">
-            <label htmlFor="eventIcon">Icon</label>
+            <label htmlFor="eventIcon">{t('event.icon')}</label>
             <select
               id="eventIcon"
               value={formData.icon}
@@ -179,18 +181,18 @@ export default function EventModal({
           </div>
 
           <div className="form-group">
-            <label htmlFor="eventTags">Tags (comma separated)</label>
+            <label htmlFor="eventTags">{t('event.tags')}</label>
             <div className="tag-input-group">
               <input
                 id="eventTags"
                 type="text"
-                placeholder="e.g. milestone, important, achievement"
+                placeholder={t('event.tagsPlaceholder')}
                 value={tagInput}
                 onChange={e => setTagInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
                 className="form-control"
               />
-              <button type="button" className="btn-add-tag" onClick={handleAddTag}>Add</button>
+              <button type="button" className="btn-add-tag" onClick={handleAddTag}>{t('event.addTag')}</button>
             </div>
             {formData.tags.length > 0 && (
               <div className="tags-list">
@@ -212,10 +214,10 @@ export default function EventModal({
 
           <div className="form-actions">
             <button type="button" className="btn btn-secondary" onClick={onClose}>
-              Cancel
+              {t('common.cancel')}
             </button>
             <button type="submit" className="btn btn-primary">
-              {event ? 'Update Event' : 'Save Event'}
+              {event ? t('event.update') : t('event.save')}
             </button>
           </div>
         </form>

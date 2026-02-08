@@ -638,6 +638,15 @@ export function getAppSettings() {
   return db.prepare('SELECT * FROM app_settings').all();
 }
 
+export function setAppSetting(key, value) {
+  db.prepare(`
+    INSERT INTO app_settings (key, value)
+    VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `).run(key, value);
+  return { key, value };
+}
+
 // -- Backup / Restore --
 export function resetAllData() {
   const tx = db.transaction(() => {

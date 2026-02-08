@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { PlusCircle, UserCheck } from 'lucide-react';
+import { useI18n } from '../contexts/useI18n';
 
 interface Profile {
   id: string;
@@ -16,6 +17,7 @@ interface UserProfile {
 }
 
 export const UsersPage = () => {
+  const { t } = useI18n();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
   const [newUserName, setNewUserName] = useState('');
@@ -69,20 +71,20 @@ export const UsersPage = () => {
     window.location.reload();
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <div>{t('users.loading')}</div>;
 
   return (
     <div className="h-full flex flex-col">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold font-heading">Users</h2>
+        <h2 className="text-3xl font-bold font-heading">{t('users.title')}</h2>
       </div>
 
       <div className="card mb-6">
-        <h3 className="text-xl font-bold mb-3">Create New User</h3>
+        <h3 className="text-xl font-bold mb-3">{t('users.createUser')}</h3>
         <div className="flex gap-3">
           <input
             className="flex-1 p-2 border rounded font-hand text-lg"
-            placeholder="User name"
+            placeholder={t('users.userName')}
             value={newUserName}
             onChange={e => setNewUserName(e.target.value)}
           />
@@ -90,17 +92,17 @@ export const UsersPage = () => {
             onClick={handleCreate}
             className="btn bg-blue-500 text-white flex items-center gap-2"
           >
-            <PlusCircle size={18} /> Create
+            <PlusCircle size={18} /> {t('common.create')}
           </button>
         </div>
       </div>
 
       <div className="card mb-6">
-        <h3 className="text-xl font-bold mb-3">Create New Profile (for active user)</h3>
+        <h3 className="text-xl font-bold mb-3">{t('users.createProfile')}</h3>
         <div className="flex gap-3">
           <input
             className="flex-1 p-2 border rounded font-hand text-lg"
-            placeholder="Profile name"
+            placeholder={t('users.profileName')}
             value={newProfileName}
             onChange={e => setNewProfileName(e.target.value)}
           />
@@ -109,7 +111,7 @@ export const UsersPage = () => {
             className="btn bg-indigo-500 text-white flex items-center gap-2"
             disabled={!activeUserId}
           >
-            <PlusCircle size={18} /> Create Profile
+            <PlusCircle size={18} /> {t('users.createProfileBtn')}
           </button>
         </div>
       </div>
@@ -120,40 +122,40 @@ export const UsersPage = () => {
             <div className="flex justify-between items-center mb-3">
               <div>
                 <div className="text-lg font-bold">{u.name}</div>
-                <div className="text-xs text-gray-500">ID: {u.id}</div>
+                <div className="text-xs text-gray-500">{t('common.idLabel')} {u.id}</div>
               </div>
               {activeUserId === u.id ? (
                 <div className="flex items-center gap-2 text-blue-600 font-bold">
-                  <UserCheck size={18} /> Active
+                  <UserCheck size={18} /> {t('users.active')}
                 </div>
               ) : (
                 <button
                   onClick={() => handleSwitch(u.id)}
                   className="btn bg-gray-100"
                 >
-                  Switch User
+                  {t('users.switchUser')}
                 </button>
               )}
             </div>
 
             {activeUserId === u.id && (
               <div>
-                <div className="text-sm font-bold text-gray-600 mb-2">Profiles</div>
+                <div className="text-sm font-bold text-gray-600 mb-2">{t('users.profiles')}</div>
                 <div className="space-y-2">
                   {(u.profiles || []).map(p => (
                     <div key={p.id} className="flex items-center justify-between bg-white border rounded p-2">
                       <div>
                         <div className="text-sm font-bold">{p.name}</div>
-                        <div className="text-xs text-gray-400">ID: {p.id}</div>
+                        <div className="text-xs text-gray-400">{t('common.idLabel')} {p.id}</div>
                       </div>
                       {u.activeProfileId === p.id ? (
-                        <span className="text-xs font-bold text-indigo-600">Active</span>
+                        <span className="text-xs font-bold text-indigo-600">{t('users.active')}</span>
                       ) : (
                         <button
                           className="btn bg-gray-100"
                           onClick={() => handleSwitchProfile(p.id)}
                         >
-                          Switch Profile
+                          {t('users.switchProfile')}
                         </button>
                       )}
                     </div>

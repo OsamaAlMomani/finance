@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Target, Plus, Trash2, Edit2, TrendingUp } from 'lucide-react';
+import { useI18n } from '../contexts/useI18n';
 
 interface Goal {
   id: string;
@@ -11,6 +12,7 @@ interface Goal {
 }
 
 export const GoalsPage = () => {
+    const { t } = useI18n();
     const [goals, setGoals] = useState<Goal[]>([]);
     const [showModal, setShowModal] = useState(false);
     const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
@@ -103,7 +105,7 @@ export const GoalsPage = () => {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm("Delete this goal?")) return;
+        if (!confirm(t('goals.deleteConfirm'))) return;
         if (!window.electron) return;
         await window.electron.invoke('db-delete-goal', id);
         loadGoals();
@@ -112,9 +114,9 @@ export const GoalsPage = () => {
     return (
         <div className="h-full">
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-3xl font-bold font-heading">Financial Goals</h2>
+                <h2 className="text-3xl font-bold font-heading">{t('goals.title')}</h2>
                 <button onClick={() => handleOpenModal()} className="btn bg-purple-500 text-white flex items-center gap-2">
-                    <Plus size={20} /> Add Goal
+                    <Plus size={20} /> {t('goals.add')}
                 </button>
             </div>
 
@@ -127,16 +129,16 @@ export const GoalsPage = () => {
                                 <button 
                                     onClick={() => handleOpenModal(g)}
                                     className="text-gray-300 hover:text-blue-500"
-                                    aria-label={`Edit goal ${g.name}`}
-                                    title="Edit goal"
+                                    aria-label={`${t('common.edit')} ${g.name}`}
+                                    title={t('common.edit')}
                                 >
                                     <Edit2 size={16} />
                                 </button>
                                 <button 
                                     onClick={() => handleDelete(g.id)}
                                     className="text-gray-300 hover:text-red-500"
-                                    aria-label={`Delete goal ${g.name}`}
-                                    title="Delete goal"
+                                    aria-label={`${t('common.delete')} ${g.name}`}
+                                    title={t('common.delete')}
                                 >
                                     <Trash2 size={16} />
                                 </button>
@@ -148,7 +150,7 @@ export const GoalsPage = () => {
                              </div>
                              
                              <div className="flex justify-between text-sm text-gray-500 mb-4">
-                                <span>Target: {new Date(g.target_date).toLocaleDateString()}</span>
+                                          <span>{t('goals.targetDate', { date: new Date(g.target_date).toLocaleDateString() })}</span>
                                 <span className={percent >= 100 ? 'text-green-500 font-bold' : ''}>
                                     {percent.toFixed(0)}%
                                 </span>
@@ -162,11 +164,11 @@ export const GoalsPage = () => {
 
                              <div className="flex justify-between items-end mb-3">
                                 <div>
-                                    <p className="text-xs text-gray-400">Current</p>
+                                    <p className="text-xs text-gray-400">{t('goals.current')}</p>
                                     <p className="font-bold text-lg">${g.current_amount}</p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-xs text-gray-400">Target</p>
+                                    <p className="text-xs text-gray-400">{t('goals.target')}</p>
                                     <p className="font-bold text-gray-600">${g.target_amount}</p>
                                 </div>
                              </div>
@@ -175,7 +177,7 @@ export const GoalsPage = () => {
                                 onClick={() => handleOpenProgressModal(g)}
                                 className="w-full btn btn-sm bg-purple-100 text-purple-600 flex items-center justify-center gap-2"
                              >
-                                <TrendingUp size={16} /> Add Progress
+                                          <TrendingUp size={16} /> {t('goals.addProgress')}
                              </button>
                         </div>
                     );
@@ -186,32 +188,32 @@ export const GoalsPage = () => {
                 <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
                     <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm">
                         <h3 className="text-2xl font-bold mb-4 font-heading">
-                            {editingGoal ? 'Edit Goal' : 'Set a Goal'}
+                            {editingGoal ? t('goals.edit') : t('goals.set')}
                         </h3>
                         <form onSubmit={handleSave} className="space-y-3">
-                            <label htmlFor="goal-name" className="block text-sm font-bold mb-1">Goal Name</label>
+                            <label htmlFor="goal-name" className="block text-sm font-bold mb-1">{t('goals.goalName')}</label>
                             <input 
                                 id="goal-name"
                                 className="w-full p-2 border rounded font-hand text-lg" 
-                                placeholder="Goal Name (e.g. New Car)" 
+                                placeholder={t('goals.goalNamePlaceholder')}
                                 required
                                 value={newGoal.name}
                                 onChange={e => setNewGoal({...newGoal, name: e.target.value})}
                             />
-                             <label htmlFor="goal-target" className="block text-sm font-bold mb-1">Target Amount</label>
+                             <label htmlFor="goal-target" className="block text-sm font-bold mb-1">{t('goals.targetAmount')}</label>
                              <input 
                                 id="goal-target"
                                 className="w-full p-2 border rounded font-hand text-lg" 
                                 type="number" 
                                 step="0.01"
-                                placeholder="Target Amount" 
+                                placeholder={t('goals.targetAmountPlaceholder')}
                                 required
                                 value={newGoal.target}
                                 onChange={e => setNewGoal({...newGoal, target: e.target.value})}
                             />
                             <div className="grid grid-cols-2 gap-2">
                                 <div>
-                                    <label htmlFor="goal-date" className="text-xs font-bold text-gray-500">Target Date</label>
+                                    <label htmlFor="goal-date" className="text-xs font-bold text-gray-500">{t('goals.targetDateLabel')}</label>
                                     <input 
                                         id="goal-date"
                                         className="w-full p-2 border rounded font-hand text-lg" 
@@ -222,22 +224,22 @@ export const GoalsPage = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label htmlFor="goal-start" className="text-xs font-bold text-gray-500">Current Amount</label>
+                                    <label htmlFor="goal-start" className="text-xs font-bold text-gray-500">{t('goals.currentAmountLabel')}</label>
                                     <input 
                                         id="goal-start"
                                         className="w-full p-2 border rounded font-hand text-lg" 
                                         type="number"
                                         step="0.01" 
-                                        placeholder="0" 
+                                        placeholder={t('goals.currentAmountPlaceholder')}
                                         value={newGoal.current}
                                         onChange={e => setNewGoal({...newGoal, current: e.target.value})}
                                     />
                                 </div>
                             </div>
                             <div className="flex gap-2 mt-4">
-                                <button type="button" onClick={() => setShowModal(false)} className="btn bg-gray-100 flex-1">Cancel</button>
+                                <button type="button" onClick={() => setShowModal(false)} className="btn bg-gray-100 flex-1">{t('common.cancel')}</button>
                                 <button type="submit" className="btn bg-purple-500 text-white flex-1">
-                                    {editingGoal ? 'Update' : 'Create'}
+                                    {editingGoal ? t('common.update') : t('common.create')}
                                 </button>
                             </div>
                         </form>
@@ -248,29 +250,29 @@ export const GoalsPage = () => {
             {showProgressModal && progressGoal && (
                 <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
                     <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm">
-                        <h3 className="text-2xl font-bold mb-4 font-heading">Update Progress</h3>
-                        <p className="text-gray-600 mb-4">Goal: <strong>{progressGoal.name}</strong></p>
+                        <h3 className="text-2xl font-bold mb-4 font-heading">{t('goals.updateProgress')}</h3>
+                        <p className="text-gray-600 mb-4">{t('goals.goalLabel', { name: progressGoal.name })}</p>
                         <p className="text-sm text-gray-500 mb-4">
-                            Current: ${progressGoal.current_amount} / ${progressGoal.target_amount}
+                            {t('goals.currentSummary', { current: progressGoal.current_amount, target: progressGoal.target_amount })}
                         </p>
                         <form onSubmit={handleUpdateProgress} className="space-y-4">
                             <div>
                                 <label htmlFor="progress-amount" className="block text-sm font-bold mb-1">
-                                    Add Amount
+                                    {t('goals.addAmount')}
                                 </label>
                                 <input
                                     id="progress-amount"
                                     className="w-full p-2 border rounded font-hand text-lg"
                                     type="number"
                                     step="0.01"
-                                    placeholder="Amount to add"
+                                    placeholder={t('goals.addAmountPlaceholder')}
                                     required
                                     value={progressAmount}
                                     onChange={e => setProgressAmount(e.target.value)}
                                 />
                                 {progressAmount && (
                                     <p className="text-xs text-gray-500 mt-1">
-                                        New total: ${(progressGoal.current_amount + parseFloat(progressAmount || '0')).toFixed(2)}
+                                        {t('goals.newTotal', { amount: (progressGoal.current_amount + parseFloat(progressAmount || '0')).toFixed(2) })}
                                     </p>
                                 )}
                             </div>
@@ -280,10 +282,10 @@ export const GoalsPage = () => {
                                     onClick={() => setShowProgressModal(false)}
                                     className="btn bg-gray-100 flex-1"
                                 >
-                                    Cancel
+                                    {t('common.cancel')}
                                 </button>
                                 <button type="submit" className="btn bg-purple-500 text-white flex-1">
-                                    Update
+                                    {t('common.update')}
                                 </button>
                             </div>
                         </form>

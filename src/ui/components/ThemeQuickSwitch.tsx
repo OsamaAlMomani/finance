@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Settings as SettingsIcon } from 'lucide-react';
 import { applyTheme } from '../utils/theme';
 import type { ThemeKey } from '../utils/theme';
+import { useI18n } from '../contexts/useI18n';
 
 const THEME_OPTIONS: { key: ThemeKey; label: string }[] = [
   { key: 'default', label: 'Default' },
@@ -15,6 +16,7 @@ const THEME_OPTIONS: { key: ThemeKey; label: string }[] = [
 ];
 
 export const ThemeQuickSwitch = () => {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<ThemeKey>(() => (localStorage.getItem('theme') as ThemeKey) || 'default');
 
@@ -38,14 +40,14 @@ export const ThemeQuickSwitch = () => {
     <div className="theme-quick">
       <button
         className="theme-quick-btn"
-        aria-label="Theme settings"
+        aria-label={t('theme.quick.settings')}
         onClick={() => setOpen((prev) => !prev)}
       >
         <SettingsIcon size={16} />
       </button>
       {open && (
         <div className="theme-quick-menu">
-          <div className="theme-quick-title">Theme</div>
+          <div className="theme-quick-title">{t('theme.quick.title')}</div>
           <div className="theme-quick-grid">
             {THEME_OPTIONS.map(opt => (
               <button
@@ -53,7 +55,7 @@ export const ThemeQuickSwitch = () => {
                 className={`theme-quick-item ${theme === opt.key ? 'active' : ''}`}
                 onClick={() => apply(opt.key)}
               >
-                {opt.label}
+                {t(`settings.theme.${opt.key === 'men' ? 'male' : opt.key === 'girly' ? 'female' : opt.key}`)}
               </button>
             ))}
           </div>

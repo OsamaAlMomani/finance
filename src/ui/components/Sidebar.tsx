@@ -1,7 +1,9 @@
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, Receipt, PiggyBank, Target, CalendarDays, Settings, CreditCard, FileUp, ClipboardList, LogOut } from 'lucide-react';
+import { useI18n } from '../contexts/useI18n';
 
 export const Sidebar = () => {
+  const { t } = useI18n();
   const linkClass = ({ isActive }: { isActive: boolean }) => 
     `flex items-center gap-3 p-3 rounded-lg transition-colors mb-2 text-lg ${
       isActive 
@@ -13,49 +15,49 @@ export const Sidebar = () => {
     <div className="sidebar">
       <div className="mb-8 p-2">
         <h1 className="text-2xl font-bold font-heading heading-font">
-          SketchBoard <span className="text-blue-500">Pro</span>
+          {t('app.brand')} <span className="text-blue-500">{t('app.brandSuffix')}</span>
         </h1>
       </div>
       
       <nav className="flex-1">
         <NavLink to="/" className={linkClass}>
           <LayoutDashboard size={22} />
-          <span>Dashboard</span>
+          <span>{t('sidebar.dashboard')}</span>
         </NavLink>
         <NavLink to="/transactions" className={linkClass}>
           <Receipt size={22} />
-          <span>Transactions</span>
+          <span>{t('sidebar.transactions')}</span>
         </NavLink>
         <NavLink to="/budget" className={linkClass}>
           <PiggyBank size={22} />
-          <span>Budget</span>
+          <span>{t('sidebar.budget')}</span>
         </NavLink>
         <NavLink to="/goals" className={linkClass}>
           <Target size={22} />
-          <span>Goals</span>
+          <span>{t('sidebar.goals')}</span>
         </NavLink>
         <NavLink to="/bills" className={linkClass}>
           <CalendarDays size={22} />
-          <span>Bills</span>
+          <span>{t('sidebar.bills')}</span>
         </NavLink>
         <NavLink to="/loans" className={linkClass}>
           <CreditCard size={22} />
-          <span>Loans</span>
+          <span>{t('sidebar.loans')}</span>
         </NavLink>
         <NavLink to="/plans" className={linkClass}>
           <ClipboardList size={22} />
-          <span>Plans</span>
+          <span>{t('sidebar.plans')}</span>
         </NavLink>
         <NavLink to="/import-export" className={linkClass}>
           <FileUp size={22} />
-          <span>Import/Export</span>
+          <span>{t('sidebar.importExport')}</span>
         </NavLink>
       </nav>
 
       <div className="mt-auto">
         <NavLink to="/settings" className={linkClass}>
           <Settings size={22} />
-          <span>Settings</span>
+          <span>{t('sidebar.settings')}</span>
         </NavLink>
         <button
           className={`${linkClass({ isActive: false })} w-full text-left`}
@@ -65,7 +67,7 @@ export const Sidebar = () => {
           }}
         >
           <LogOut size={22} />
-          <span>Logout</span>
+          <span>{t('sidebar.logout')}</span>
         </button>
       </div>
     </div>

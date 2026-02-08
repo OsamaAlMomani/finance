@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { PlusCircle, UserCheck } from 'lucide-react';
 import { ThemeQuickSwitch } from '../components/ThemeQuickSwitch';
+import { useI18n } from '../contexts/useI18n';
 
 interface Profile {
   id: string;
@@ -16,15 +17,16 @@ interface UserProfile {
 }
 
 export const ProfileSelectPage = ({ onSelected }: { onSelected: () => void }) => {
+  const { t } = useI18n();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [newProfileName, setNewProfileName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const canUseElectron = !!window.electron?.invoke;
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!canUseElectron) {
-      setError('Electron backend not available. Please run the Electron app.');
+      setError(t('profile.error.noElectron'));
       setLoading(false);
       return;
     }
@@ -36,21 +38,21 @@ export const ProfileSelectPage = ({ onSelected }: { onSelected: () => void }) =>
       setError('');
     } catch (e) {
       console.error('Failed to load profiles', e);
-      setError('Failed to load profiles. Check the main process logs.');
+      setError(t('profile.error.loadProfiles'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [canUseElectron, t]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   const handleCreateProfile = async () => {
     if (!canUseElectron) return;
     if (!user) return;
     if (!newProfileName.trim()) {
-      setError('Enter a profile name to continue.');
+      setError(t('profile.error.enterName'));
       return;
     }
     try {
@@ -60,7 +62,7 @@ export const ProfileSelectPage = ({ onSelected }: { onSelected: () => void }) =>
       await load();
     } catch (e) {
       console.error('Create profile failed', e);
-      setError('Create profile failed. Check the main process logs.');
+      setError(t('profile.error.createFailed'));
     }
   };
 
@@ -72,13 +74,12 @@ export const ProfileSelectPage = ({ onSelected }: { onSelected: () => void }) =>
       onSelected();
     } catch (e) {
       console.error('Switch profile failed', e);
-      setError('Switch profile failed. Check the main process logs.');
+      setError(t('profile.error.switchFailed'));
     }
   };
 
-
-  if (loading) return <div>Loading...</div>;
-  if (!user) return <div>No user found.</div>;
+  if (loading) return <div>{t('profile.loading')}</div>;
+  if (!user) return <div>{t('profile.noUser')}</div>;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -86,8 +87,8 @@ export const ProfileSelectPage = ({ onSelected }: { onSelected: () => void }) =>
         <div className="auth-theme">
           <ThemeQuickSwitch />
         </div>
-        <h2 className="text-3xl font-bold font-heading mb-2 text-center">Select Profile</h2>
-        <p className="text-center text-sm text-gray-500 mb-6">User: {user.name}</p>
+        <h2 className="text-3xl font-bold font-heading mb-2 text-center">{t('profile.selectTitle')}</h2>
+        <p className="text-center text-sm text-gray-500 mb-6">{t('profile.userLabel', { name: user.name })}</p>
 
         {!!error && (
           <div className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">
@@ -96,11 +97,11 @@ export const ProfileSelectPage = ({ onSelected }: { onSelected: () => void }) =>
         )}
 
         <div className="card mb-6">
-          <h3 className="text-xl font-bold mb-3">Create New Profile</h3>
+          <h3 className="text-xl font-bold mb-3">{t('profile.createTitle')}</h3>
           <div className="flex gap-3">
             <input
               className="flex-1 p-2 border rounded"
-              placeholder="Profile name"
+              placeholder={t('profile.profileName')}
               value={newProfileName}
               onChange={e => setNewProfileName(e.target.value)}
             />
@@ -109,7 +110,7 @@ export const ProfileSelectPage = ({ onSelected }: { onSelected: () => void }) =>
               className="btn bg-indigo-500 text-white flex items-center gap-2"
               disabled={!canUseElectron}
             >
-              <PlusCircle size={18} /> Create
+              <PlusCircle size={18} /> {t('profile.create')}
             </button>
           </div>
         </div>
@@ -121,7 +122,7 @@ export const ProfileSelectPage = ({ onSelected }: { onSelected: () => void }) =>
                 <div className="flex items-center gap-3">
                   <div>
                     <div className="text-lg font-bold">{p.name}</div>
-                    <div className="text-xs text-gray-500">ID: {p.id}</div>
+                    <div className="text-xs text-gray-500">{t('common.idLabel')} {p.id}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -131,7 +132,7 @@ export const ProfileSelectPage = ({ onSelected }: { onSelected: () => void }) =>
                       onClick={() => handleSwitchProfile(p.id)}
                       disabled={!canUseElectron}
                     >
-                      Use
+                      {t('profile.use')}
                     </button>
                   )}
                 </div>
@@ -139,14 +140,14 @@ export const ProfileSelectPage = ({ onSelected }: { onSelected: () => void }) =>
               {user.activeProfileId === p.id ? (
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-2 text-indigo-600 font-bold">
-                    <UserCheck size={18} /> Active
+                    <UserCheck size={18} /> {t('profile.active')}
                   </div>
                   <button
                     className="btn bg-indigo-500 text-white"
                     onClick={() => onSelected()}
                     disabled={!canUseElectron}
                   >
-                    Continue
+                    {t('profile.continue')}
                   </button>
                 </div>
               ) : (

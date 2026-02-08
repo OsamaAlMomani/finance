@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { PlusCircle, LogIn } from 'lucide-react';
 import { ThemeQuickSwitch } from '../components/ThemeQuickSwitch';
 import { getDefaultAvatar } from '../utils/avatars';
+import { useI18n } from '../contexts/useI18n';
+import { LanguageSwitch } from '../components/LanguageSwitch';
 
 interface UserProfile {
   id: string;
@@ -11,6 +13,7 @@ interface UserProfile {
 }
 
 export const AuthPage = ({ onLoggedIn }: { onLoggedIn: (name: string) => void }) => {
+  const { t } = useI18n();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
@@ -19,9 +22,9 @@ export const AuthPage = ({ onLoggedIn }: { onLoggedIn: (name: string) => void })
   const [error, setError] = useState<string>('');
   const canUseElectron = !!window.electron?.invoke;
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     if (!canUseElectron) {
-      setError('Electron backend not available. Please run the Electron app.');
+      setError(t('auth.error.noElectron'));
       setLoading(false);
       return;
     }
@@ -33,20 +36,20 @@ export const AuthPage = ({ onLoggedIn }: { onLoggedIn: (name: string) => void })
       setError('');
     } catch (e) {
       console.error('Failed to load users', e);
-      setError('Failed to load users. Check the main process logs.');
+      setError(t('auth.error.loadUsers'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [canUseElectron, t]);
 
   useEffect(() => {
     loadUsers();
-  }, []);
+  }, [loadUsers]);
 
   const handleLogin = async () => {
     if (!canUseElectron) return;
     if (!selectedUserId) {
-      setError('Select a user before logging in.');
+      setError(t('auth.error.selectUser'));
       return;
     }
     try {
@@ -57,7 +60,7 @@ export const AuthPage = ({ onLoggedIn }: { onLoggedIn: (name: string) => void })
       setError('');
     } catch (e) {
       console.error('Login failed', e);
-      setError('Login failed. Check the main process logs.');
+      setError(t('auth.error.loginFailed'));
     }
   };
 
@@ -71,14 +74,14 @@ export const AuthPage = ({ onLoggedIn }: { onLoggedIn: (name: string) => void })
       setError('');
     } catch (e) {
       console.error('Login failed', e);
-      setError('Login failed. Check the main process logs.');
+      setError(t('auth.error.loginFailed'));
     }
   };
 
   const handleSignup = async () => {
     if (!canUseElectron) return;
     if (!newUserName.trim()) {
-      setError('Enter a name to create a user.');
+      setError(t('auth.error.enterName'));
       return;
     }
     try {
@@ -92,11 +95,11 @@ export const AuthPage = ({ onLoggedIn }: { onLoggedIn: (name: string) => void })
       }
     } catch (e) {
       console.error('Signup failed', e);
-      setError('Signup failed. Check the main process logs.');
+      setError(t('auth.error.signupFailed'));
     }
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <div>{t('auth.loading')}</div>;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -104,7 +107,10 @@ export const AuthPage = ({ onLoggedIn }: { onLoggedIn: (name: string) => void })
         <div className="auth-theme">
           <ThemeQuickSwitch />
         </div>
-        <h2 className="text-3xl font-bold font-heading mb-6 text-center">Welcome</h2>
+        <h2 className="text-3xl font-bold font-heading mb-4 text-center">{t('auth.welcome')}</h2>
+        <div className="mb-6">
+          <LanguageSwitch />
+        </div>
 
         {!!error && (
           <div className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700" role="alert">
@@ -114,29 +120,29 @@ export const AuthPage = ({ onLoggedIn }: { onLoggedIn: (name: string) => void })
 
         {!!activeUserId && (
           <div className="mb-6">
-            <h3 className="text-xl font-bold mb-2">Continue</h3>
+            <h3 className="text-xl font-bold mb-2">{t('auth.continue')}</h3>
             <button
               className="btn bg-indigo-500 text-white w-full flex items-center justify-center gap-2"
               onClick={() => loginAs(activeUserId)}
               disabled={!canUseElectron}
             >
-              <LogIn size={18} /> Continue as {users.find(u => u.id === activeUserId)?.name || 'User'}
+              <LogIn size={18} /> {t('auth.continueAs', { name: users.find(u => u.id === activeUserId)?.name || t('titlebar.userFallback') })}
             </button>
           </div>
         )}
 
         <div className="mb-6">
-          <h3 className="text-xl font-bold mb-2">Login</h3>
+          <h3 className="text-xl font-bold mb-2">{t('auth.login')}</h3>
           <div className="flex gap-3">
-            <label htmlFor="login-user" className="sr-only">Select user</label>
+            <label htmlFor="login-user" className="sr-only">{t('auth.selectUser')}</label>
             <select
               id="login-user"
               className="flex-1 p-2 border rounded"
               value={selectedUserId}
               onChange={e => setSelectedUserId(e.target.value)}
-              title="Select user"
+              title={t('auth.selectUser')}
             >
-              <option value="" disabled>Select user</option>
+              <option value="" disabled>{t('auth.selectUser')}</option>
               {users.map(u => (
                 <option key={u.id} value={u.id}>{u.name}</option>
               ))}
@@ -146,17 +152,17 @@ export const AuthPage = ({ onLoggedIn }: { onLoggedIn: (name: string) => void })
               onClick={handleLogin}
               disabled={!selectedUserId || !canUseElectron}
             >
-              <LogIn size={18} /> Login
+              <LogIn size={18} /> {t('auth.login')}
             </button>
           </div>
         </div>
 
         <div>
-          <h3 className="text-xl font-bold mb-2">Sign Up</h3>
+          <h3 className="text-xl font-bold mb-2">{t('auth.signUp')}</h3>
           <div className="flex gap-3">
             <input
               className="flex-1 p-2 border rounded"
-              placeholder="New user name"
+              placeholder={t('auth.newUserName')}
               value={newUserName}
               onChange={e => setNewUserName(e.target.value)}
             />
@@ -165,7 +171,7 @@ export const AuthPage = ({ onLoggedIn }: { onLoggedIn: (name: string) => void })
               onClick={handleSignup}
               disabled={!canUseElectron}
             >
-              <PlusCircle size={18} /> Create
+              <PlusCircle size={18} /> {t('auth.create')}
             </button>
           </div>
         </div>

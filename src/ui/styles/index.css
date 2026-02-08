@@ -17,6 +17,20 @@ body {
   transition: background-color 0.5s, color 0.3s, border-color 0.3s;
 }
 
+html[dir="rtl"] body {
+  direction: rtl;
+}
+
+html[dir="rtl"] .sidebar {
+  border-left: 2px solid var(--border-color);
+  border-right: none;
+}
+
+html[dir="rtl"] .sidebar::after {
+  left: -2px;
+  right: auto;
+}
+
 /* ==================== FORM + FILTER READABILITY ==================== */
 input,
 textarea,

@@ -52,6 +52,7 @@ export function registerIpcHandlers() {
   // Tax rules / App settings
   ipcMain.handle('db-get-tax-rules', () => dbService.getTaxRules());
   ipcMain.handle('db-get-app-settings', () => dbService.getAppSettings());
+  ipcMain.handle('db-set-app-setting', (e, key, value) => dbService.setAppSetting(key, value));
 
   // Backup / Restore
   ipcMain.handle('db-reset-all', () => dbService.resetAllData());

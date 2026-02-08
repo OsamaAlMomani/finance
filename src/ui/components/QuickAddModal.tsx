@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTransactions, useAccounts } from '../hooks/useFinanceData'
 import { X } from 'lucide-react'
 import '../styles/QuickAddModal.css'
+import { useI18n } from '../contexts/useI18n'
 
 interface QuickAddModalProps {
   isOpen: boolean
@@ -10,6 +11,7 @@ interface QuickAddModalProps {
 }
 
 export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAddModalProps) {
+  const { t } = useI18n()
   const { addTransaction } = useTransactions()
   const { accounts } = useAccounts()
   
@@ -34,19 +36,32 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
   }, [isOpen, initialType, accounts, accountId])
 
   const commonCategories = type === 'expense'
-    ? ['Food', 'Transport', 'Health', 'Entertainment', 'Utilities', 'Other']
-    : ['Salary', 'Freelance', 'Investment', 'Bonus', 'Other']
+    ? [
+        { value: 'Food', label: t('quickAdd.categoryFood') },
+        { value: 'Transport', label: t('quickAdd.categoryTransport') },
+        { value: 'Health', label: t('quickAdd.categoryHealth') },
+        { value: 'Entertainment', label: t('quickAdd.categoryEntertainment') },
+        { value: 'Utilities', label: t('quickAdd.categoryUtilities') },
+        { value: 'Other', label: t('quickAdd.categoryOther') }
+      ]
+    : [
+        { value: 'Salary', label: t('quickAdd.categorySalary') },
+        { value: 'Freelance', label: t('quickAdd.categoryFreelance') },
+        { value: 'Investment', label: t('quickAdd.categoryInvestment') },
+        { value: 'Bonus', label: t('quickAdd.categoryBonus') },
+        { value: 'Other', label: t('quickAdd.categoryOther') }
+      ]
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (!description.trim() || !amount) {
-      setError('Description and amount are required')
+      setError(t('quickAdd.error.required'))
       return
     }
 
     if (!accountId) {
-      setError('Please select an account')
+      setError(t('quickAdd.error.accountRequired'))
       return
     }
 
@@ -71,7 +86,7 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
       setDate(new Date().toISOString().split('T')[0])
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add transaction')
+      setError(err instanceof Error ? err.message : t('quickAdd.error.failed'))
     } finally {
       setLoading(false)
     }
@@ -83,8 +98,8 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
     <div className="quick-add-overlay" onClick={onClose}>
       <div className="quick-add-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Quick Add</h3>
-          <button className="close-btn" onClick={onClose} aria-label="Close quick add" title="Close">
+          <h3>{t('quickAdd.title')}</h3>
+          <button className="close-btn" onClick={onClose} aria-label={t('quickAdd.close')} title={t('common.close')}>
             <X size={20} />
           </button>
         </div>
@@ -97,20 +112,20 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
               className={`type-btn ${type === 'income' ? 'active' : ''}`}
               onClick={() => setType('income')}
             >
-              + Income
+              {t('quickAdd.type.income')}
             </button>
             <button
               type="button"
               className={`type-btn ${type === 'expense' ? 'active' : ''}`}
               onClick={() => setType('expense')}
             >
-              − Expense
+              {t('quickAdd.type.expense')}
             </button>
           </div>
 
           {/* Form Fields */}
           <div className="form-group">
-            <label htmlFor="quick-add-date">Date</label>
+            <label htmlFor="quick-add-date">{t('quickAdd.date')}</label>
             <input
               id="quick-add-date"
               type="date"
@@ -121,7 +136,7 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
           </div>
 
           <div className="form-group">
-            <label htmlFor="quick-add-account">Account</label>
+            <label htmlFor="quick-add-account">{t('quickAdd.account')}</label>
             <div className="select-wrapper">
               <select 
                 id="quick-add-account"
@@ -129,7 +144,7 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
                 onChange={e => setAccountId(e.target.value)}
                 required
               >
-                <option value="" disabled>Select Account</option>
+                <option value="" disabled>{t('quickAdd.selectAccount')}</option>
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
                     {acc.name} ({acc.currency ?? 'USD'} {(acc.currentBalance ?? 0).toLocaleString()})
@@ -140,11 +155,11 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
           </div>
 
           <div className="form-group">
-            <label htmlFor="quick-add-description">Description</label>
+            <label htmlFor="quick-add-description">{t('quickAdd.description')}</label>
             <input
               id="quick-add-description"
               type="text"
-              placeholder="e.g., Grocery shopping"
+              placeholder={t('quickAdd.descriptionPlaceholder')}
               value={description}
               onChange={e => setDescription(e.target.value)}
               required
@@ -152,11 +167,11 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
           </div>
 
           <div className="form-group">
-            <label htmlFor="quick-add-amount">Amount (JOD)</label>
+            <label htmlFor="quick-add-amount">{t('quickAdd.amount')}</label>
             <input
               id="quick-add-amount"
               type="number"
-              placeholder="0.00"
+              placeholder={t('quickAdd.amountPlaceholder')}
               step="0.01"
               min="0"
               value={amount}
@@ -166,24 +181,24 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
           </div>
 
           <div className="form-group">
-            <label htmlFor="quick-add-category">Category</label>
+            <label htmlFor="quick-add-category">{t('quickAdd.category')}</label>
             <div className="category-picker">
               <div className="category-buttons">
                 {commonCategories.map(cat => (
                   <button
-                    key={cat}
+                    key={cat.value}
                     type="button"
-                    className={`category-btn ${category === cat ? 'selected' : ''}`}
-                    onClick={() => setCategory(cat)}
+                    className={`category-btn ${category === cat.value ? 'selected' : ''}`}
+                    onClick={() => setCategory(cat.value)}
                   >
-                    {cat}
+                    {cat.label}
                   </button>
                 ))}
               </div>
               <input
                 id="quick-add-category"
                 type="text"
-                placeholder="Or enter custom..."
+                placeholder={t('quickAdd.customCategoryPlaceholder')}
                 value={category}
                 onChange={e => setCategory(e.target.value)}
               />
@@ -201,14 +216,14 @@ export default function QuickAddModal({ isOpen, onClose, initialType }: QuickAdd
               onClick={onClose}
               disabled={loading}
             >
-              Cancel
+              {t('quickAdd.cancel')}
             </button>
             <button
               type="submit"
               className="btn-submit"
               disabled={loading}
             >
-              {loading ? 'Adding...' : 'Add Transaction'}
+              {loading ? t('quickAdd.adding') : t('quickAdd.addTransaction')}
             </button>
           </div>
         </form>

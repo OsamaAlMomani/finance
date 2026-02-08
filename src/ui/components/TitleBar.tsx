@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useI18n } from '../contexts/useI18n';
 
 export const TitleBar = ({ userName }: { userName?: string }) => {
+  const { t } = useI18n();
   const [isMaximized, setIsMaximized] = useState(false);
-  const [loadedName, setLoadedName] = useState('User');
+  const [loadedName, setLoadedName] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
@@ -45,81 +47,81 @@ export const TitleBar = ({ userName }: { userName?: string }) => {
   return (
     <div className="titlebar">
       <div className="titlebar-drag">
-        <div className="titlebar-user">{userName || loadedName || 'User'}</div>
+        <div className="titlebar-user">{userName || loadedName || t('titlebar.userFallback')}</div>
       </div>
 
       <div className="titlebar-controls">
         <div className="titlebar-help">
           <button
             className="titlebar-help-btn"
-            aria-label="Help"
+            aria-label={t('titlebar.help')}
             onClick={() => setHelpOpen((prev) => !prev)}
           >
             ?
           </button>
           {helpOpen && (
             <div className="titlebar-help-menu" role="list">
-              <div className="titlebar-help-title">Help</div>
+              <div className="titlebar-help-title">{t('help.title')}</div>
               <div className="titlebar-help-item" role="listitem">
-                <span>Dashboard</span>
-                <small>Overview of balances, alerts, and recent activity.</small>
+                <span>{t('help.dashboard.title')}</span>
+                <small>{t('help.dashboard.desc')}</small>
               </div>
               <div className="titlebar-help-item" role="listitem">
-                <span>Transactions</span>
-                <small>Record income/expense/transfer and filter history.</small>
+                <span>{t('help.transactions.title')}</span>
+                <small>{t('help.transactions.desc')}</small>
               </div>
               <div className="titlebar-help-item" role="listitem">
-                <span>Budget</span>
-                <small>Create budgets and track spending vs limits.</small>
+                <span>{t('help.budget.title')}</span>
+                <small>{t('help.budget.desc')}</small>
               </div>
               <div className="titlebar-help-item" role="listitem">
-                <span>Goals</span>
-                <small>Set savings goals and monitor progress.</small>
+                <span>{t('help.goals.title')}</span>
+                <small>{t('help.goals.desc')}</small>
               </div>
               <div className="titlebar-help-item" role="listitem">
-                <span>Bills</span>
-                <small>Manage recurring bills and due dates.</small>
+                <span>{t('help.bills.title')}</span>
+                <small>{t('help.bills.desc')}</small>
               </div>
               <div className="titlebar-help-item" role="listitem">
-                <span>Loans</span>
-                <small>Track loans, interest, and payoff progress.</small>
+                <span>{t('help.loans.title')}</span>
+                <small>{t('help.loans.desc')}</small>
               </div>
               <div className="titlebar-help-item" role="listitem">
-                <span>Plans</span>
-                <small>Compare what‑if scenarios and outcomes.</small>
+                <span>{t('help.plans.title')}</span>
+                <small>{t('help.plans.desc')}</small>
               </div>
               <div className="titlebar-help-item" role="listitem">
-                <span>Users</span>
-                <small>Create users and profiles for separate data.</small>
+                <span>{t('help.users.title')}</span>
+                <small>{t('help.users.desc')}</small>
               </div>
               <div className="titlebar-help-item" role="listitem">
-                <span>Import/Export</span>
-                <small>Import files or export/backup your data.</small>
+                <span>{t('help.importExport.title')}</span>
+                <small>{t('help.importExport.desc')}</small>
               </div>
               <div className="titlebar-help-item" role="listitem">
-                <span>Settings</span>
-                <small>Change preferences like currency and privacy.</small>
+                <span>{t('help.settings.title')}</span>
+                <small>{t('help.settings.desc')}</small>
               </div>
             </div>
           )}
         </div>
         <button
           className="titlebar-control"
-          aria-label="Minimize"
+          aria-label={t('titlebar.minimize')}
           onClick={() => window.electron?.windowControl?.minimize()}
         >
           —
         </button>
         <button
           className="titlebar-control"
-          aria-label={isMaximized ? 'Restore' : 'Maximize'}
+          aria-label={isMaximized ? t('titlebar.restore') : t('titlebar.maximize')}
           onClick={handleMaximize}
         >
           {isMaximized ? '❐' : '□'}
         </button>
         <button
           className="titlebar-control close"
-          aria-label="Close"
+          aria-label={t('titlebar.close')}
           onClick={() => window.electron?.windowControl?.close()}
         >
           ✕

@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 import JSZip from 'jszip';
 import { Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle, X } from 'lucide-react';
+import { useI18n } from '../contexts/useI18n';
 
 type ImportType = 'transactions' | 'loans' | 'bills';
 
@@ -24,6 +25,7 @@ interface PreviewRow {
 }
 
 export const ImportExportPage = () => {
+  const { t } = useI18n();
   const [importType, setImportType] = useState<ImportType>('transactions');
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
@@ -166,12 +168,12 @@ export const ImportExportPage = () => {
       return parseCSV(textResult.value);
     }
 
-    throw new Error('Unsupported file type. Please upload CSV, Excel (.xlsx), or Word (.docx) files.');
+    throw new Error(t('import.errors.unsupportedFile'));
   };
 
   const buildPreview = async (headers: string[], dataRows: string[][]) => {
     if (!window.electron) {
-      throw new Error('Electron API not available');
+      throw new Error(t('import.errors.electronUnavailable'));
     }
 
     const [accounts, categories, existingTransactions, existingLoans, existingBills] = await Promise.all([
@@ -215,7 +217,7 @@ export const ImportExportPage = () => {
       const rowErrors: string[] = [];
       const changes: string[] = [];
       if (!data.id || !data.id.trim()) {
-        rowErrors.push('ID is required');
+        rowErrors.push(t('import.errors.idRequired'));
       }
       const existing = data.id ? existingMap[data.id] : undefined;
 
@@ -224,7 +226,7 @@ export const ImportExportPage = () => {
           a.name.toLowerCase() === data.account?.toLowerCase()
         );
         if (!account) {
-          rowErrors.push(`Account "${data.account}" not found`);
+          rowErrors.push(t('import.errors.accountNotFound', { name: data.account }));
         }
 
         if (data.type !== 'transfer' && data.category) {
@@ -232,7 +234,7 @@ export const ImportExportPage = () => {
             c.name.toLowerCase() === data.category?.toLowerCase()
           );
           if (!category) {
-            rowErrors.push(`Category "${data.category}" not found`);
+            rowErrors.push(t('import.errors.categoryNotFound', { name: data.category }));
           }
         }
 
@@ -241,7 +243,7 @@ export const ImportExportPage = () => {
             a.name.toLowerCase() === data.to_account?.toLowerCase()
           );
           if (!toAccount) {
-            rowErrors.push(`To Account "${data.to_account}" not found`);
+            rowErrors.push(t('import.errors.toAccountNotFound', { name: data.to_account }));
           }
         }
       }
@@ -369,7 +371,7 @@ export const ImportExportPage = () => {
           });
 
           if (!data.id || !data.id.trim()) {
-            throw new Error('ID is required');
+            throw new Error(t('import.errors.idRequired'));
           }
           importedIds.push(data.id.trim());
 
@@ -378,7 +380,7 @@ export const ImportExportPage = () => {
               a.name.toLowerCase() === data.account?.toLowerCase()
             );
             if (!account) {
-              throw new Error(`Account "${data.account}" not found`);
+              throw new Error(t('import.errors.accountNotFound', { name: data.account }));
             }
 
             let category = null;
@@ -387,7 +389,7 @@ export const ImportExportPage = () => {
                 c.name.toLowerCase() === data.category?.toLowerCase()
               );
               if (!category) {
-                throw new Error(`Category "${data.category}" not found`);
+                throw new Error(t('import.errors.categoryNotFound', { name: data.category }));
               }
             }
 
@@ -397,7 +399,7 @@ export const ImportExportPage = () => {
                 a.name.toLowerCase() === data.to_account?.toLowerCase()
               );
               if (!toAccount) {
-                throw new Error(`To Account "${data.to_account}" not found`);
+                throw new Error(t('import.errors.toAccountNotFound', { name: data.to_account }));
               }
             }
 
@@ -462,7 +464,7 @@ export const ImportExportPage = () => {
           }
         } catch (error) {
           failed++;
-          errors.push(`Row ${rowNum}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          errors.push(`${t('import.preview.rowLabel', { row: rowNum })}: ${error instanceof Error ? error.message : t('import.errors.unknown')}`);
         }
       }
 
@@ -484,7 +486,7 @@ export const ImportExportPage = () => {
         success: 0,
         updated: 0,
         failed: 0,
-        errors: [error instanceof Error ? error.message : 'Unknown error occurred']
+        errors: [error instanceof Error ? error.message : t('import.errors.unknown')]
       });
     } finally {
       setImporting(false);
@@ -533,7 +535,7 @@ export const ImportExportPage = () => {
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      alert('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      alert(t('import.exportFailed', { error: error instanceof Error ? error.message : t('import.errors.unknown') }));
     }
   };
 
@@ -557,7 +559,7 @@ export const ImportExportPage = () => {
   const exportAllDataZip = async (resetAfter = false) => {
     if (!window.electron) return;
     const confirmed = resetAfter
-      ? confirm('This will export ALL data and then RESET (delete) everything. Continue?')
+      ? confirm(t('import.confirm.resetAll'))
       : true;
     if (!confirmed) return;
 
@@ -600,18 +602,18 @@ export const ImportExportPage = () => {
 
       const saveResult = await window.electron.invoke('app-save-zip', { defaultPath, dataBase64 });
       if (saveResult?.canceled) {
-        setZipMessage('Export canceled.');
+        setZipMessage(t('import.exportCanceled'));
         return;
       }
 
       if (resetAfter) {
         await window.electron.invoke('db-reset-all');
-        setZipMessage('All data has been reset. You can import the backup ZIP anytime.');
+        setZipMessage(t('import.resetDone'));
       } else {
-        setZipMessage('Backup ZIP exported successfully.');
+        setZipMessage(t('import.exportSuccess'));
       }
     } catch (error) {
-      setZipMessage(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setZipMessage(t('import.exportFailed', { error: error instanceof Error ? error.message : t('import.errors.unknown') }));
     } finally {
       setZipBusy(false);
     }
@@ -619,7 +621,7 @@ export const ImportExportPage = () => {
 
   const importAllDataZip = async (fileOrBase64: File | string) => {
     if (!window.electron) return;
-    const confirmed = confirm('This will REPLACE your current data with the backup. Continue?');
+    const confirmed = confirm(t('import.confirm.replaceAll'));
     if (!confirmed) return;
 
     try {
@@ -638,9 +640,9 @@ export const ImportExportPage = () => {
 
       await window.electron.invoke('db-reset-all');
       await window.electron.invoke('db-restore-all', payload);
-      setZipMessage('Backup imported successfully.');
+      setZipMessage(t('import.importSuccess'));
     } catch (error) {
-      setZipMessage(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setZipMessage(t('import.importFailed', { error: error instanceof Error ? error.message : t('import.errors.unknown') }));
     } finally {
       setZipBusy(false);
     }
@@ -648,30 +650,28 @@ export const ImportExportPage = () => {
 
   return (
     <div className="min-h-screen w-full max-w-5xl mx-auto px-6 py-6 flex flex-col gap-6">
-      <h2 className="text-3xl font-bold font-heading mb-6">Import / Export Data</h2>
+      <h2 className="text-3xl font-bold font-heading mb-6">{t('import.title')}</h2>
 
       <div className="card mb-6 zip-card">
         <div className="flex items-center gap-2 mb-4">
           <Download className="text-indigo-500" size={24} />
-          <h3 className="text-xl font-bold">Full Backup (Zip)</h3>
+          <h3 className="text-xl font-bold">{t('import.fullBackup')}</h3>
         </div>
-        <p className="text-sm text-gray-600 mb-4">
-          Export ALL data like a Facebook archive, and optionally reset. You can restore everything from the ZIP later.
-        </p>
+        <p className="text-sm text-gray-600 mb-4">{t('import.fullBackupDesc')}</p>
         <div className="flex flex-wrap gap-3 zip-actions">
           <button
             onClick={() => exportAllDataZip(false)}
             className="btn bg-indigo-500 text-white"
             disabled={zipBusy}
           >
-            Export All Data (ZIP)
+            {t('import.exportAllZip')}
           </button>
           <button
             onClick={() => exportAllDataZip(true)}
             className="btn bg-red-500 text-white"
             disabled={zipBusy}
           >
-            Export & Reset Data
+            {t('import.exportResetZip')}
           </button>
           <button
             className="btn bg-gray-100"
@@ -683,15 +683,13 @@ export const ImportExportPage = () => {
               await importAllDataZip(result.dataBase64);
             }}
           >
-            Import Backup ZIP
+            {t('import.importBackupZip')}
           </button>
         </div>
         {zipMessage && (
           <p className="text-sm mt-3 text-gray-700">{zipMessage}</p>
         )}
-        <p className="text-xs text-gray-500 mt-2">
-          Backup includes: accounts, categories, transactions, budgets, goals, bills, loans, plans, tax rules, app settings.
-        </p>
+        <p className="text-xs text-gray-500 mt-2">{t('import.backupIncludes')}</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -699,36 +697,36 @@ export const ImportExportPage = () => {
         <div className="card">
           <div className="flex items-center gap-2 mb-4">
             <Upload className="text-blue-500" size={24} />
-            <h3 className="text-xl font-bold">Import Data</h3>
+            <h3 className="text-xl font-bold">{t('import.importData')}</h3>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label htmlFor="import-type" className="block text-sm font-bold mb-2">Data Type</label>
+              <label htmlFor="import-type" className="block text-sm font-bold mb-2">{t('import.dataType')}</label>
               <select
                 id="import-type"
                 className="w-full p-2 border rounded"
                 value={importType}
                 onChange={(e) => setImportType(e.target.value as ImportType)}
               >
-                <option value="transactions">Transactions</option>
-                <option value="loans">Loans</option>
-                <option value="bills">Bills</option>
+                <option value="transactions">{t('transactions.title')}</option>
+                <option value="loans">{t('loans.title')}</option>
+                <option value="bills">{t('bills.title')}</option>
               </select>
             </div>
 
             <div className="bg-blue-50 border border-blue-200 rounded p-3">
               <p className="text-sm text-blue-800 mb-2">
-                <strong>Instructions:</strong>
+                <strong>{t('import.instructions')}</strong>
               </p>
               <ol className="text-xs text-blue-700 space-y-1 ml-4 list-decimal">
-                <li>Download the template below</li>
-                <li>Fill in your data (ID is required for every row)</li>
-                <li>Upload the completed CSV/Excel/Word file</li>
-                <li>Existing IDs will be updated, new IDs will be created</li>
+                <li>{t('import.step1')}</li>
+                <li>{t('import.step2')}</li>
+                <li>{t('import.step3')}</li>
+                <li>{t('import.step4')}</li>
               </ol>
               <p className="text-xs text-blue-700 mt-2">
-                Supported: CSV, Excel (.xlsx), Word (.docx). Word templates should use a table.
+                {t('import.supported')}
               </p>
             </div>
 
@@ -737,7 +735,7 @@ export const ImportExportPage = () => {
               className="w-full btn bg-green-500 text-white flex items-center justify-center gap-2"
             >
               <Download size={18} />
-              Download {importType.charAt(0).toUpperCase() + importType.slice(1)} Template
+              {t('import.downloadTemplate', { type: importType.charAt(0).toUpperCase() + importType.slice(1) })}
             </button>
 
             <div className="border-2 border-dashed border-gray-300 rounded p-6 text-center">
@@ -757,9 +755,9 @@ export const ImportExportPage = () => {
               >
                 <FileSpreadsheet size={48} className="text-gray-400" />
                 <span className="font-bold text-gray-600">
-                  {importing ? 'Importing...' : 'Click to Upload CSV File'}
+                  {importing ? t('import.importing') : t('import.clickToUpload')}
                 </span>
-                <span className="text-xs text-gray-400">CSV, Excel (.xlsx), or Word (.docx)</span>
+                <span className="text-xs text-gray-400">{t('import.supported')}</span>
               </label>
             </div>
 
@@ -774,22 +772,22 @@ export const ImportExportPage = () => {
                     <AlertCircle className="text-orange-600" size={20} />
                   )}
                   <div className="flex-1">
-                    <p className="font-bold">Import Results:</p>
+                    <p className="font-bold">{t('import.importResults')}</p>
                     <ul className="text-sm mt-2 space-y-1">
                       {result.success > 0 && (
-                        <li className="text-green-700">✓ {result.success} new records created</li>
+                        <li className="text-green-700">✓ {t('import.newRecords', { count: result.success })}</li>
                       )}
                       {result.updated > 0 && (
-                        <li className="text-blue-700">↻ {result.updated} records updated</li>
+                        <li className="text-blue-700">↻ {t('import.updatedRecords', { count: result.updated })}</li>
                       )}
                       {result.failed > 0 && (
-                        <li className="text-red-700">✗ {result.failed} records failed</li>
+                        <li className="text-red-700">✗ {t('import.failedRecords', { count: result.failed })}</li>
                       )}
                     </ul>
                     {result.errors.length > 0 && (
                       <details className="mt-2">
                         <summary className="text-xs text-red-600 cursor-pointer">
-                          Show errors ({result.errors.length})
+                          {t('import.showErrors', { count: result.errors.length })}
                         </summary>
                         <ul className="text-xs text-red-600 mt-1 ml-4 max-h-40 overflow-y-auto">
                           {result.errors.map((err, idx) => (
@@ -809,18 +807,16 @@ export const ImportExportPage = () => {
         <div className="card">
           <div className="flex items-center gap-2 mb-4">
             <Download className="text-green-500" size={24} />
-            <h3 className="text-xl font-bold">Export Data</h3>
+            <h3 className="text-xl font-bold">{t('import.exportData')}</h3>
           </div>
 
           <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Export your existing data to CSV format. You can use this to:
-            </p>
+            <p className="text-sm text-gray-600">{t('import.exportDesc')}</p>
             <ul className="text-sm text-gray-600 space-y-1 ml-4 list-disc">
-              <li>Backup your data</li>
-              <li>Edit multiple records at once</li>
-              <li>Share with accountants</li>
-              <li>Import to other software</li>
+              <li>{t('import.exportUse1')}</li>
+              <li>{t('import.exportUse2')}</li>
+              <li>{t('import.exportUse3')}</li>
+              <li>{t('import.exportUse4')}</li>
             </ul>
 
             <div className="space-y-3 pt-4">
@@ -829,7 +825,7 @@ export const ImportExportPage = () => {
                 className="w-full btn bg-blue-500 text-white flex items-center justify-center gap-2"
               >
                 <FileSpreadsheet size={18} />
-                Export All Transactions
+                {t('import.exportAllTransactions')}
               </button>
 
               <button
@@ -837,7 +833,7 @@ export const ImportExportPage = () => {
                 className="w-full btn bg-red-500 text-white flex items-center justify-center gap-2"
               >
                 <FileSpreadsheet size={18} />
-                Export All Loans
+                {t('import.exportAllLoans')}
               </button>
 
               <button
@@ -845,13 +841,13 @@ export const ImportExportPage = () => {
                 className="w-full btn bg-purple-500 text-white flex items-center justify-center gap-2"
               >
                 <FileSpreadsheet size={18} />
-                Export All Bills
+                {t('import.exportAllBills')}
               </button>
             </div>
 
             <div className="bg-gray-50 border border-gray-200 rounded p-3 mt-4">
               <p className="text-xs text-gray-600">
-                <strong>Note:</strong> Exported files include all fields and IDs. You can edit and re-import them to update records.
+                <strong>{t('import.exportNote')}</strong>
               </p>
             </div>
           </div>
@@ -860,34 +856,34 @@ export const ImportExportPage = () => {
 
       {/* Template Format Reference */}
       <div className="card mt-6">
-        <h3 className="text-lg font-bold mb-3">Template Format Reference</h3>
+        <h3 className="text-lg font-bold mb-3">{t('import.templateRef')}</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
           <div>
-            <p className="font-bold mb-2">Transactions Template:</p>
+            <p className="font-bold mb-2">{t('import.template.transactions')}</p>
             <ul className="space-y-1 text-gray-600">
-              <li>• <strong>id:</strong> Required for every row</li>
-              <li>• <strong>type:</strong> expense, income, or transfer</li>
-              <li>• <strong>category:</strong> Must match existing category name (skip for transfers)</li>
-              <li>• <strong>account:</strong> Must match existing account name</li>
-              <li>• <strong>to_account:</strong> Required for transfers only</li>
+              <li>• <strong>{t('import.template.idRequired')}</strong></li>
+              <li>• <strong>{t('import.template.type')}</strong></li>
+              <li>• <strong>{t('import.template.category')}</strong></li>
+              <li>• <strong>{t('import.template.account')}</strong></li>
+              <li>• <strong>{t('import.template.toAccount')}</strong></li>
             </ul>
           </div>
           <div>
-            <p className="font-bold mb-2">Loans Template:</p>
+            <p className="font-bold mb-2">{t('import.template.loans')}</p>
             <ul className="space-y-1 text-gray-600">
-              <li>• <strong>id:</strong> Required for every row</li>
-              <li>• <strong>payment_frequency:</strong> monthly, biweekly, or weekly</li>
-              <li>• <strong>interest_rate:</strong> Annual rate as percentage (e.g., 5.5)</li>
-              <li>• <strong>dates:</strong> Format: YYYY-MM-DD</li>
+              <li>• <strong>{t('import.template.idRequired')}</strong></li>
+              <li>• <strong>{t('import.template.paymentFrequency')}</strong></li>
+              <li>• <strong>{t('import.template.interestRate')}</strong></li>
+              <li>• <strong>{t('import.template.dates')}</strong></li>
             </ul>
           </div>
           <div>
-            <p className="font-bold mb-2">Bills Template:</p>
+            <p className="font-bold mb-2">{t('import.template.bills')}</p>
             <ul className="space-y-1 text-gray-600">
-              <li>• <strong>id:</strong> Required for every row</li>
-              <li>• <strong>recurrence:</strong> monthly, weekly, etc.</li>
-              <li>• <strong>is_paid:</strong> true or false</li>
-              <li>• <strong>auto_pay:</strong> true or false</li>
+              <li>• <strong>{t('import.template.idRequired')}</strong></li>
+              <li>• <strong>{t('import.template.recurrence')}</strong></li>
+              <li>• <strong>{t('import.template.isPaid')}</strong></li>
+              <li>• <strong>{t('import.template.autoPay')}</strong></li>
             </ul>
           </div>
         </div>
@@ -898,16 +894,16 @@ export const ImportExportPage = () => {
           <div className="import-preview-card w-full max-w-6xl max-h-[90vh] rounded-xl shadow-xl border overflow-hidden flex flex-col">
             <div className="import-preview-header flex items-center justify-between px-6 py-4 border-b">
               <div>
-                <h3 className="text-xl font-bold">Import Preview</h3>
+                <h3 className="text-xl font-bold">{t('import.preview.title')}</h3>
                 <p className="text-sm preview-muted">
-                  File: {pendingFileName || 'Uploaded file'}
+                  {t('import.preview.file', { name: pendingFileName || t('import.preview.uploadedFile') })}
                 </p>
               </div>
               <button
                 onClick={() => setPreviewOpen(false)}
                 className="preview-muted hover:opacity-80"
-                aria-label="Close preview"
-                title="Close preview"
+                aria-label={t('common.close')}
+                title={t('common.close')}
               >
                 <X size={20} />
               </button>
@@ -915,15 +911,15 @@ export const ImportExportPage = () => {
 
             <div className="import-preview-summary px-6 py-4 border-b">
               <div className="flex flex-wrap gap-4 items-center text-sm">
-                <span className="preview-badge preview-add">Added: {previewSummary.added}</span>
-                <span className="preview-badge preview-update">Updated: {previewSummary.updated}</span>
-                <span className="preview-badge preview-neutral">Removed: {previewSummary.removed} (imports do not delete)</span>
+                <span className="preview-badge preview-add">{t('import.preview.added', { count: previewSummary.added })}</span>
+                <span className="preview-badge preview-update">{t('import.preview.updated', { count: previewSummary.updated })}</span>
+                <span className="preview-badge preview-neutral">{t('import.preview.removed', { count: previewSummary.removed })}</span>
                 {previewSummary.errors > 0 && (
-                  <span className="preview-badge preview-error">Errors: {previewSummary.errors}</span>
+                  <span className="preview-badge preview-error">{t('import.preview.errors', { count: previewSummary.errors })}</span>
                 )}
               </div>
               <div className="text-xs preview-muted mt-2">
-                Changes are highlighted: <span className="preview-add-text font-bold">green</span> = add, <span className="preview-update-text font-bold">blue</span> = update, <span className="preview-error-text font-bold">red</span> = error.
+                {t('import.preview.changesHint')}
               </div>
             </div>
 
@@ -931,8 +927,8 @@ export const ImportExportPage = () => {
               <table className="import-preview-table min-w-full text-sm">
                 <thead className="sticky top-0 import-preview-thead border-b">
                   <tr>
-                    <th className="p-3 text-left text-xs font-bold preview-muted">Row</th>
-                    <th className="p-3 text-left text-xs font-bold preview-muted">Status</th>
+                    <th className="p-3 text-left text-xs font-bold preview-muted">{t('common.row')}</th>
+                    <th className="p-3 text-left text-xs font-bold preview-muted">{t('common.status')}</th>
                     {previewHeaders.map((h, idx) => (
                       <th key={idx} className="p-3 text-left text-xs font-bold preview-muted">
                         {h}
@@ -954,9 +950,9 @@ export const ImportExportPage = () => {
                     >
                       <td className="p-3 text-xs preview-muted">{row.rowNum}</td>
                       <td className="p-3 text-xs font-bold">
-                        {row.status === 'add' && 'ADD'}
-                        {row.status === 'update' && 'UPDATE'}
-                        {row.status === 'error' && 'ERROR'}
+                        {row.status === 'add' && t('import.preview.status.add')}
+                        {row.status === 'update' && t('import.preview.status.update')}
+                        {row.status === 'error' && t('import.preview.status.error')}
                       </td>
                       {previewHeaders.map((h, hIdx) => (
                         <td key={hIdx} className="p-3 whitespace-nowrap">
@@ -972,23 +968,23 @@ export const ImportExportPage = () => {
             <div className="import-preview-footer px-6 py-4 border-t">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm font-bold mb-2">System understood changes</p>
+                  <p className="text-sm font-bold mb-2">{t('import.preview.systemChanges')}</p>
                   <ul className="text-xs preview-muted max-h-28 overflow-y-auto list-disc ml-4">
                     {previewRows.flatMap(r => r.changes.map((c, i) => (
-                      <li key={`${r.rowNum}-${i}`}>Row {r.rowNum}: {c}</li>
+                      <li key={`${r.rowNum}-${i}`}>{t('import.preview.rowLabel', { row: r.rowNum })}: {c}</li>
                     )))}
                     {previewRows.every(r => r.changes.length === 0) && (
-                      <li>No field-level changes detected (new rows only or identical values).</li>
+                      <li>{t('import.preview.noChanges')}</li>
                     )}
                   </ul>
                 </div>
                 <div>
-                  <p className="text-sm font-bold mb-2">Errors / Issues</p>
+                  <p className="text-sm font-bold mb-2">{t('import.preview.errorsTitle')}</p>
                   <ul className="text-xs preview-error-text max-h-28 overflow-y-auto list-disc ml-4">
                     {previewRows.flatMap(r => r.errors.map((e, i) => (
-                      <li key={`${r.rowNum}-err-${i}`}>Row {r.rowNum}: {e}</li>
+                      <li key={`${r.rowNum}-err-${i}`}>{t('import.preview.rowLabel', { row: r.rowNum })}: {e}</li>
                     )))}
-                    {previewSummary.errors === 0 && <li className="preview-muted">No errors found.</li>}
+                    {previewSummary.errors === 0 && <li className="preview-muted">{t('import.preview.noErrors')}</li>}
                   </ul>
                 </div>
               </div>
@@ -998,14 +994,14 @@ export const ImportExportPage = () => {
                   onClick={() => setPreviewOpen(false)}
                   className="btn bg-gray-100"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={applyImport}
                   className={`btn text-white ${previewSummary.errors > 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500'}`}
                   disabled={previewSummary.errors > 0 || importing}
                 >
-                  {importing ? 'Applying...' : 'Apply Import'}
+                  {importing ? t('import.preview.applying') : t('import.preview.apply')}
                 </button>
               </div>
             </div>

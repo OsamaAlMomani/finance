@@ -1,6 +1,7 @@
 import { useId, useRef } from 'react';
 import { Shuffle, Upload } from 'lucide-react';
 import { AVATARS, getRandomAvatar } from '../utils/avatars';
+import { useI18n } from '../contexts/useI18n';
 
 interface AvatarPickerProps {
   value?: string;
@@ -9,6 +10,7 @@ interface AvatarPickerProps {
 }
 
 export const AvatarPicker = ({ value, onChange, label }: AvatarPickerProps) => {
+  const { t } = useI18n();
   const inputId = useId();
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -25,18 +27,18 @@ export const AvatarPicker = ({ value, onChange, label }: AvatarPickerProps) => {
     <div className="avatar-picker">
       {label && <div className="avatar-label">{label}</div>}
       <div className="avatar-current">
-        <img src={value || AVATARS[0].data} alt="Avatar" />
+        <img src={value || AVATARS[0].data} alt={t('avatar.alt')} />
       </div>
       <div className="avatar-actions">
         <button type="button" className="btn avatar-action" onClick={() => onChange(getRandomAvatar())}>
-          <Shuffle size={16} /> Random
+          <Shuffle size={16} /> {t('avatar.random')}
         </button>
         <button
           type="button"
           className="btn avatar-action"
           onClick={() => fileRef.current?.click()}
         >
-          <Upload size={16} /> Upload
+          <Upload size={16} /> {t('avatar.upload')}
         </button>
         <input
           id={inputId}
@@ -44,8 +46,8 @@ export const AvatarPicker = ({ value, onChange, label }: AvatarPickerProps) => {
           type="file"
           accept="image/*"
           className="sr-only"
-          aria-label="Upload avatar image"
-          title="Upload avatar image"
+          aria-label={t('avatar.uploadLabel')}
+          title={t('avatar.uploadLabel')}
           onChange={(e) => handleUpload(e.target.files?.[0])}
         />
       </div>

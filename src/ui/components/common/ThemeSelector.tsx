@@ -1,29 +1,31 @@
 import { useState, useEffect, useRef } from 'react'
-import { useTheme } from '../../contexts/ThemeContext'
+import { useTheme } from '../../contexts/useTheme'
+import { useI18n } from '../../contexts/useI18n'
 import './ThemeSelector.css'
 
 type ThemeId = 'theme-1' | 'theme-2' | 'theme-3' | 'theme-4' | 'theme-5' | 'theme-6' | 'theme-7' | 'theme-girly' | 'theme-men'
 
 interface ThemeOption {
   id: ThemeId
-  label: string
+  labelKey: string
   colors: [string, string]
 }
 
 const THEMES: ThemeOption[] = [
-  { id: 'theme-girly', label: 'Girly', colors: ['#f093fb', '#fff0fa'] },
-  { id: 'theme-men', label: 'Men', colors: ['#2193b0', '#e8f2f8'] },
-  { id: 'theme-1', label: 'Default', colors: ['#4f46e5', '#7c3aed'] },
-  { id: 'theme-2', label: 'Purple', colors: ['#8b5cf6', '#a78bfa'] },
-  { id: 'theme-3', label: 'Green', colors: ['#10b981', '#34d399'] },
-  { id: 'theme-4', label: 'Orange', colors: ['#f59e0b', '#fbbf24'] },
-  { id: 'theme-5', label: 'Pink', colors: ['#ec4899', '#f472b6'] },
-  { id: 'theme-6', label: 'Dark', colors: ['#111827', '#1f2937'] },
-  { id: 'theme-7', label: 'Light', colors: ['#f8fafc', '#f1f5f9'] }
+  { id: 'theme-girly', labelKey: 'theme.selector.option.girly', colors: ['#f093fb', '#fff0fa'] },
+  { id: 'theme-men', labelKey: 'theme.selector.option.men', colors: ['#2193b0', '#e8f2f8'] },
+  { id: 'theme-1', labelKey: 'theme.selector.option.default', colors: ['#4f46e5', '#7c3aed'] },
+  { id: 'theme-2', labelKey: 'theme.selector.option.purple', colors: ['#8b5cf6', '#a78bfa'] },
+  { id: 'theme-3', labelKey: 'theme.selector.option.green', colors: ['#10b981', '#34d399'] },
+  { id: 'theme-4', labelKey: 'theme.selector.option.orange', colors: ['#f59e0b', '#fbbf24'] },
+  { id: 'theme-5', labelKey: 'theme.selector.option.pink', colors: ['#ec4899', '#f472b6'] },
+  { id: 'theme-6', labelKey: 'theme.selector.option.dark', colors: ['#111827', '#1f2937'] },
+  { id: 'theme-7', labelKey: 'theme.selector.option.light', colors: ['#f8fafc', '#f1f5f9'] }
 ]
 
 export default function ThemeSelector() {
   const { currentTheme, setTheme } = useTheme()
+  const { t } = useI18n()
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -58,11 +60,11 @@ export default function ThemeSelector() {
           e.stopPropagation()
           setDropdownOpen(!dropdownOpen)
         }}
-        aria-label="Change theme"
-        title="Change theme"
+        aria-label={t('theme.selector.change')}
+        title={t('theme.selector.change')}
       >
         <i className="fas fa-palette"></i>
-        <span>Themes</span>
+        <span>{t('theme.selector.title')}</span>
         <i className={`fas fa-chevron-down ${dropdownOpen ? 'rotated' : ''}`}></i>
       </button>
 
@@ -73,24 +75,24 @@ export default function ThemeSelector() {
               key={theme.id}
               className={`theme-card theme-card--${theme.id} ${currentTheme === theme.id ? 'active' : ''}`}
               onClick={() => handleThemeSelect(theme.id)}
-              title={theme.label}
+              title={t(theme.labelKey)}
             >
               {currentTheme === theme.id && (
                 <div className="theme-card-check">
                   <i className="fas fa-check"></i>
                 </div>
               )}
-              <span className="theme-card-label">{theme.label}</span>
+              <span className="theme-card-label">{t(theme.labelKey)}</span>
             </div>
           ))}
         </div>
 
         <div className="theme-actions">
           <button className="btn-theme-secondary" onClick={() => setDropdownOpen(false)}>
-            Done
+            {t('theme.selector.done')}
           </button>
           <button className="btn-theme-primary" onClick={handleReset}>
-            Reset
+            {t('theme.selector.reset')}
           </button>
         </div>
       </div>
