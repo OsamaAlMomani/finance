@@ -1,61 +1,144 @@
-import { ipcMain } from 'electron';
 import * as dbService from '../services/databaseService.js';
 
-export function registerIpcHandlers() {
+const register = (ipcMainInstance, channel, handler) => {
+  ipcMainInstance.handle(channel, async (_event, ...args) => {
+    try {
+      return await handler(...args);
+    } catch (error) {
+      console.error(`[IPC:${channel}]`, error);
+      throw error;
+    }
+  });
+};
+
+export function registerIpcHandlers(ipcMainInstance) {
+  if (!ipcMainInstance) {
+    throw new Error('ipcMain instance is required to register handlers.');
+  }
+
+  const on = (channel, handler) => register(ipcMainInstance, channel, handler);
+
   // Accounts
-  ipcMain.handle('db-get-accounts', () => dbService.getAccounts());
-  ipcMain.handle('db-get-accounts-with-balance', () => dbService.getAccountsWithBalance());
-  ipcMain.handle('db-create-account', (e, account) => dbService.createAccount(account));
-  ipcMain.handle('db-update-account', (e, account) => dbService.updateAccount(account));
-  ipcMain.handle('db-delete-account', (e, id) => dbService.deleteAccount(id));
+  on('db-get-accounts', () => dbService.getAccounts());
+  on('db-get-accounts-with-balance', () => dbService.getAccountsWithBalance());
+  on('db-create-account', (account) => dbService.createAccount(account));
+  on('db-update-account', (account) => dbService.updateAccount(account));
+  on('db-delete-account', (id) => dbService.deleteAccount(id));
 
   // Transactions
-  ipcMain.handle('db-get-transactions', (e, filter) => dbService.getTransactions(filter));
-  ipcMain.handle('db-add-transaction', (e, tx) => dbService.addTransaction(tx));
-  ipcMain.handle('db-update-transaction', (e, tx) => dbService.updateTransaction(tx));
-  ipcMain.handle('db-delete-transaction', (e, id) => dbService.deleteTransaction(id));
+  on('db-get-transactions', (filter) => dbService.getTransactions(filter || {}));
+  on('db-add-transaction', (tx) => dbService.addTransaction(tx));
+  on('db-update-transaction', (tx) => dbService.updateTransaction(tx));
+  on('db-delete-transaction', (id) => dbService.deleteTransaction(id));
 
   // Dashboard
-  ipcMain.handle('db-get-dashboard-stats', () => dbService.getDashboardStats());
+  on('db-get-dashboard-stats', () => dbService.getDashboardStats());
 
   // Categories
-  ipcMain.handle('db-get-categories', () => dbService.getCategories());
-  ipcMain.handle('db-create-category', (e, cat) => dbService.createCategory(cat));
-  ipcMain.handle('db-delete-category', (e, id) => dbService.deleteCategory(id));
+  on('db-get-categories', () => dbService.getCategories());
+  on('db-create-category', (cat) => dbService.createCategory(cat));
+  on('db-delete-category', (id, reassignmentCategoryId = null) => dbService.deleteCategory(id, reassignmentCategoryId));
+
+  // Classification layer
+  on('db-get-subcategories', (categoryId) => dbService.getSubcategoriesList(categoryId));
+  on('db-save-subcategory', (subcategory) => dbService.saveSubcategory(subcategory));
+  on('db-delete-subcategory', (id) => dbService.deleteSubcategoryById(id));
+
+  on('db-get-tags', () => dbService.getTagsList());
+  on('db-save-tag', (tag) => dbService.saveTag(tag));
+  on('db-delete-tag', (id) => dbService.deleteTagById(id));
+
+  on('db-get-labels', () => dbService.getLabelsList());
+  on('db-save-label', (label) => dbService.saveLabel(label));
+  on('db-delete-label', (id) => dbService.deleteLabelById(id));
+
+  on('db-get-classification-rules', () => dbService.getClassificationRulesList());
+  on('db-save-classification-rule', (rule) => dbService.saveClassificationRule(rule));
+  on('db-delete-classification-rule', (id) => dbService.deleteClassificationRuleById(id));
+
+  // Recurring
+  on('db-get-recurring-items', (filter) => dbService.getRecurringItems(filter || {}));
+  on('db-save-recurring-item', (item) => dbService.saveRecurringItem(item));
+  on('db-delete-recurring-item', (id) => dbService.deleteRecurringItem(id));
 
   // Budgets
-  ipcMain.handle('db-get-budgets', () => dbService.getBudgets());
-  ipcMain.handle('db-save-budget', (e, budget) => dbService.saveBudget(budget));
-  ipcMain.handle('db-delete-budget', (e, id) => dbService.deleteBudget(id));
+  on('db-get-budgets', () => dbService.getBudgets());
+  on('db-save-budget', (budget) => dbService.saveBudget(budget));
+  on('db-delete-budget', (id) => dbService.deleteBudget(id));
 
   // Goals
-  ipcMain.handle('db-get-goals', () => dbService.getGoals());
-  ipcMain.handle('db-save-goal', (e, goal) => dbService.saveGoal(goal));
-  ipcMain.handle('db-update-goal', (e, goal) => dbService.saveGoal(goal));
-  ipcMain.handle('db-delete-goal', (e, id) => dbService.deleteGoal(id));
+  on('db-get-goals', () => dbService.getGoals());
+  on('db-get-goal-contributions', () => dbService.getGoalContributions());
+  on('db-save-goal', (goal) => dbService.saveGoal(goal));
+  on('db-update-goal', (goal) => dbService.saveGoal(goal));
+  on('db-delete-goal', (id) => dbService.deleteGoal(id));
 
   // Bills
-  ipcMain.handle('db-get-bills', () => dbService.getBills());
-  ipcMain.handle('db-save-bill', (e, bill) => dbService.saveBill(bill));
-  ipcMain.handle('db-delete-bill', (e, id) => dbService.deleteBill(id));
+  on('db-get-bills', () => dbService.getBills());
+  on('db-save-bill', (bill) => dbService.saveBill(bill));
+  on('db-delete-bill', (id) => dbService.deleteBill(id));
 
   // Loans
-  ipcMain.handle('db-get-loans', () => dbService.getLoans());
-  ipcMain.handle('db-save-loan', (e, loan) => dbService.saveLoan(loan));
-  ipcMain.handle('db-delete-loan', (e, id) => dbService.deleteLoan(id));
+  on('db-get-loans', () => dbService.getLoans());
+  on('db-save-loan', (loan) => dbService.saveLoan(loan));
+  on('db-delete-loan', (id) => dbService.deleteLoan(id));
 
   // Plans
-  ipcMain.handle('db-get-plans', () => dbService.getPlans());
-  ipcMain.handle('db-save-plan', (e, plan) => dbService.savePlan(plan));
-  ipcMain.handle('db-delete-plan', (e, id) => dbService.deletePlan(id));
+  on('db-get-plans', () => dbService.getPlans());
+  on('db-save-plan', (plan) => dbService.savePlan(plan));
+  on('db-delete-plan', (id) => dbService.deletePlan(id));
+
+  // Alerts
+  on('db-get-alerts', (filter, context) => dbService.getAlertsList(filter || {}, context || {}));
+  on('db-set-alert-status', (id, status, options, context) => dbService.setAlertStatus(id, status, options || {}, context || {}));
+  on('db-get-alert-summary', (context) => dbService.getAlertSummary(context || {}));
+  on('db-get-alert-events', (filter, context) => dbService.getAlertEvents(filter || {}, context || {}));
+  on('db-get-system-state', (month, context) => dbService.getSystemState(month, context || {}));
+
+  // Settlement / Reports
+  on('db-get-settlements', (context) => dbService.getMonthlySettlements(context || {}));
+  on('db-get-settlement-by-month', (month, context) => dbService.getMonthlySettlementByMonth(month, context || {}));
+  on('db-finalize-settlement', (month, notes, context) => dbService.finalizeMonthlySettlement(month, notes, context || {}));
+  on('db-reopen-settlement', (month, reason, context) => dbService.reopenMonthlySettlement(month, reason, context || {}));
+  on('db-get-settlement-events', (filter, context) => dbService.getSettlementEvents(filter || {}, context || {}));
+
+  on('db-get-reports', (context) => dbService.getReports(context || {}));
+  on('db-get-report-by-month', (month, context) => dbService.getReportByMonth(month, context || {}));
+  on('db-generate-report', (month, context) => dbService.generateReport(month, context || {}));
+  on('db-export-report-csv', (month, context) => dbService.exportReportCsv(month, context || {}));
+  on('db-export-report-pdf-content', (month, context) => dbService.exportReportPdfContent(month, context || {}));
+  on('db-get-report-exports', (filter, context) => dbService.getReportExports(filter || {}, context || {}));
+
+  // Scenarios
+  on('db-get-scenarios', () => dbService.getScenariosList());
+  on('db-get-scenario', (id) => dbService.getScenarioDetails(id));
+  on('db-run-scenario', (input) => dbService.runScenarioSimulation(input));
+  on('db-save-scenario', (scenario) => dbService.saveScenarioModel(scenario));
+  on('db-delete-scenario', (id) => dbService.deleteScenarioModel(id));
+
+  // Permissions
+  on('db-get-permissions', (filter) => dbService.getPermissionsList(filter || {}));
+  on('db-save-permission', (permission) => dbService.savePermissionEntry(permission));
+  on('db-delete-permission', (id) => dbService.deletePermissionEntry(id));
+  on('db-check-permission', (context) => dbService.checkPermissionEntry(context || {}));
+
+  // Share snapshots
+  on('db-create-share-snapshot', (input) => dbService.createShareSnapshotEntry(input));
+  on('db-list-share-snapshots', (filter, context) => dbService.listShareSnapshotsEntries(filter || {}, context || {}));
+  on('db-revoke-share-snapshot', (id, context) => dbService.revokeShareSnapshotEntry(id, context || {}));
+  on('db-export-share-snapshot', (id, context) => dbService.exportShareSnapshotEntry(id, context || {}));
 
   // Tax rules / App settings
-  ipcMain.handle('db-get-tax-rules', () => dbService.getTaxRules());
-  ipcMain.handle('db-get-app-settings', () => dbService.getAppSettings());
-  ipcMain.handle('db-set-app-setting', (e, key, value) => dbService.setAppSetting(key, value));
+  on('db-get-tax-rules', () => dbService.getTaxRules());
+  on('db-get-app-settings', () => dbService.getAppSettings());
+  on('db-set-app-setting', (key, value) => dbService.setAppSetting(key, value));
+
+  // Schema version / upgrade
+  on('db-get-schema-status', () => dbService.getSchemaStatus());
+  on('db-mark-v2-backup-complete', (meta) => dbService.markV2BackupCompleted(meta || {}));
+  on('db-complete-v2-upgrade', () => dbService.completeV2Upgrade());
 
   // Backup / Restore
-  ipcMain.handle('db-reset-all', () => dbService.resetAllData());
-  ipcMain.handle('db-restore-all', (e, payload) => dbService.restoreAllData(payload));
+  on('db-reset-all', () => dbService.resetAllData());
+  on('db-restore-all', (payload) => dbService.restoreAllData(payload));
 }
-

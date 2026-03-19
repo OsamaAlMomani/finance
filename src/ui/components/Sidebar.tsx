@@ -1,75 +1,246 @@
+import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Receipt, PiggyBank, Target, CalendarDays, Settings, CreditCard, FileUp, ClipboardList, LogOut } from 'lucide-react';
+import {
+  LayoutDashboard,
+  Receipt,
+  PiggyBank,
+  Target,
+  CalendarDays,
+  Settings,
+  CreditCard,
+  FileUp,
+  ClipboardList,
+  LogOut,
+  ChevronLeft,
+  ChevronRight,
+  Menu,
+  X,
+  type LucideIcon
+} from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useI18n } from '../contexts/useI18n';
 
+const MOBILE_BREAKPOINT = 1024;
+
+interface SidebarNavItem {
+  to: string;
+  labelKey: string;
+  icon: LucideIcon;
+}
+
+const MAIN_LINKS: SidebarNavItem[] = [
+  { to: '/', labelKey: 'sidebar.dashboard', icon: LayoutDashboard },
+  { to: '/transactions', labelKey: 'sidebar.transactions', icon: Receipt },
+  { to: '/budget', labelKey: 'sidebar.budget', icon: PiggyBank },
+  { to: '/goals', labelKey: 'sidebar.goals', icon: Target },
+  { to: '/bills', labelKey: 'sidebar.bills', icon: CalendarDays },
+  { to: '/loans', labelKey: 'sidebar.loans', icon: CreditCard },
+  { to: '/plans', labelKey: 'sidebar.plans', icon: ClipboardList },
+  { to: '/import-export', labelKey: 'sidebar.importExport', icon: FileUp }
+];
+
+const FOOTER_LINKS: SidebarNavItem[] = [{ to: '/settings', labelKey: 'sidebar.settings', icon: Settings }];
+
 export const Sidebar = () => {
-  const { t } = useI18n();
-  const linkClass = ({ isActive }: { isActive: boolean }) => 
-    `flex items-center gap-3 p-3 rounded-lg transition-colors mb-2 text-lg ${
-      isActive 
-        ? 'bg-blue-100 text-blue-700 font-bold border-2 border-blue-200 border-dashed' 
-        : 'hover:bg-gray-100 text-gray-700'
-    }`;
+  const { t, dir } = useI18n();
+  const [collapsed, setCollapsed] = useState<boolean>(() => localStorage.getItem('sidebarCollapsed') === '1');
+  const [isMobile, setIsMobile] = useState<boolean>(() => window.innerWidth <= MOBILE_BREAKPOINT);
+  const [mobileOpen, setMobileOpen] = useState<boolean>(() => window.innerWidth > MOBILE_BREAKPOINT);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    setMobileOpen(!isMobile);
+  }, [isMobile]);
+
+  useEffect(() => {
+    localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0');
+  }, [collapsed]);
+
+  const shouldShowLabels = isMobile || !collapsed;
+  const collapsedLabelOffset = dir === 'rtl' ? 8 : -8;
+  const desktopHoverX = dir === 'rtl' ? -3 : 3;
+  const mobileHiddenX = dir === 'rtl' ? '106%' : '-106%';
+
+  const toggleSidebar = () => {
+    if (isMobile) {
+      setMobileOpen((prev) => !prev);
+      return;
+    }
+    setCollapsed((prev) => !prev);
+  };
+
+  const closeMobileIfNeeded = () => {
+    if (isMobile) setMobileOpen(false);
+  };
+
+  const renderNavLink = (item: SidebarNavItem, index: number) => {
+    const Icon = item.icon;
+    return (
+      <motion.div
+        key={item.to}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.22, delay: index * 0.03 }}
+      >
+        <NavLink to={item.to} className="sidebar-nav-link" onClick={closeMobileIfNeeded}>
+          <motion.span
+            className="inline-flex"
+            whileHover={{ rotate: isMobile ? 0 : -6 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 20 }}
+          >
+            <Icon size={22} />
+          </motion.span>
+          <motion.span
+            className="inline-block overflow-hidden whitespace-nowrap"
+            initial={false}
+            animate={
+              shouldShowLabels
+                ? { width: 'auto', opacity: 1, x: 0 }
+                : { width: 0, opacity: 0, x: collapsedLabelOffset }
+            }
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+          >
+            {t(item.labelKey)}
+          </motion.span>
+        </NavLink>
+      </motion.div>
+    );
+  };
 
   return (
-    <div className="sidebar">
-      <div className="mb-8 p-2">
-        <h1 className="text-2xl font-bold font-heading heading-font">
-          {t('app.brand')} <span className="text-blue-500">{t('app.brandSuffix')}</span>
-        </h1>
-      </div>
-      
-      <nav className="flex-1">
-        <NavLink to="/" className={linkClass}>
-          <LayoutDashboard size={22} />
-          <span>{t('sidebar.dashboard')}</span>
-        </NavLink>
-        <NavLink to="/transactions" className={linkClass}>
-          <Receipt size={22} />
-          <span>{t('sidebar.transactions')}</span>
-        </NavLink>
-        <NavLink to="/budget" className={linkClass}>
-          <PiggyBank size={22} />
-          <span>{t('sidebar.budget')}</span>
-        </NavLink>
-        <NavLink to="/goals" className={linkClass}>
-          <Target size={22} />
-          <span>{t('sidebar.goals')}</span>
-        </NavLink>
-        <NavLink to="/bills" className={linkClass}>
-          <CalendarDays size={22} />
-          <span>{t('sidebar.bills')}</span>
-        </NavLink>
-        <NavLink to="/loans" className={linkClass}>
-          <CreditCard size={22} />
-          <span>{t('sidebar.loans')}</span>
-        </NavLink>
-        <NavLink to="/plans" className={linkClass}>
-          <ClipboardList size={22} />
-          <span>{t('sidebar.plans')}</span>
-        </NavLink>
-        <NavLink to="/import-export" className={linkClass}>
-          <FileUp size={22} />
-          <span>{t('sidebar.importExport')}</span>
-        </NavLink>
-      </nav>
+    <>
+      <AnimatePresence>
+        {isMobile && !mobileOpen && (
+          <motion.button
+            key="sidebar-open-fab"
+            className="sidebar-mobile-fab"
+            onClick={() => setMobileOpen(true)}
+            aria-label={t('sidebar.show')}
+            title={t('sidebar.show')}
+            initial={{ opacity: 0, scale: 0.8, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 6 }}
+            transition={{ type: 'spring', stiffness: 280, damping: 22 }}
+            whileHover={{ y: -2, scale: 1.04 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Menu size={18} />
+          </motion.button>
+        )}
+      </AnimatePresence>
 
-      <div className="mt-auto">
-        <NavLink to="/settings" className={linkClass}>
-          <Settings size={22} />
-          <span>{t('sidebar.settings')}</span>
-        </NavLink>
-        <button
-          className={`${linkClass({ isActive: false })} w-full text-left`}
-          onClick={() => {
-            localStorage.removeItem('authUserId');
-            window.location.reload();
-          }}
+      <AnimatePresence>
+        {isMobile && mobileOpen && (
+          <motion.button
+            key="sidebar-backdrop"
+            type="button"
+            className="sidebar-backdrop"
+            onClick={() => setMobileOpen(false)}
+            aria-label={t('sidebar.hide')}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          />
+        )}
+      </AnimatePresence>
+
+      <motion.aside
+        className={`sidebar ${!isMobile && collapsed ? 'sidebar-collapsed' : ''} ${isMobile && !mobileOpen ? 'pointer-events-none' : ''}`}
+        initial={false}
+        animate={
+          isMobile
+            ? { x: mobileOpen ? 0 : mobileHiddenX, opacity: mobileOpen ? 1 : 0.98 }
+            : { x: 0, width: collapsed ? 84 : 280, opacity: 1 }
+        }
+        transition={
+          isMobile
+            ? { type: 'spring', stiffness: 340, damping: 32, mass: 0.85 }
+            : { type: 'spring', stiffness: 280, damping: 26, mass: 0.9 }
+        }
+      >
+        <motion.button
+          className="sidebar-toggle"
+          onClick={toggleSidebar}
+          aria-label={
+            isMobile
+              ? mobileOpen
+                ? t('sidebar.hide')
+                : t('sidebar.show')
+              : collapsed
+              ? t('sidebar.expand')
+              : t('sidebar.collapse')
+          }
+          title={
+            isMobile
+              ? mobileOpen
+                ? t('sidebar.hide')
+                : t('sidebar.show')
+              : collapsed
+              ? t('sidebar.expand')
+              : t('sidebar.collapse')
+          }
+          whileTap={{ scale: 0.92 }}
+          whileHover={{ rotate: isMobile ? 0 : -8 }}
         >
-          <LogOut size={22} />
-          <span>{t('sidebar.logout')}</span>
-        </button>
-      </div>
-    </div>
+          {isMobile ? <X size={16} /> : collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+        </motion.button>
+
+        <motion.div className="mb-8 p-2 text-center" initial={false} animate={{ opacity: 1, y: 0 }}>
+          <h1 className="text-2xl font-bold font-heading heading-font">
+            <span className="brand-icon">{t('app.brandIcon') || '💰'}</span>
+            <motion.span
+              className="brand-text inline-block overflow-hidden whitespace-nowrap"
+              initial={false}
+              animate={
+                shouldShowLabels
+                  ? { width: 'auto', opacity: 1, x: 0 }
+                  : { width: 0, opacity: 0, x: collapsedLabelOffset }
+              }
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+            >
+              {t('app.brand')}{' '}
+              <span className="text-theme-primary">{t('app.brandSuffix')}</span>
+            </motion.span>
+          </h1>
+        </motion.div>
+
+        <nav className="flex-1">
+          {MAIN_LINKS.map(renderNavLink)}
+        </nav>
+
+        <div className="mt-auto">
+          {FOOTER_LINKS.map((item, index) => renderNavLink(item, MAIN_LINKS.length + index))}
+          <motion.button
+            className="sidebar-nav-link w-full text-left"
+            onClick={() => {
+              localStorage.removeItem('authUserId');
+              window.location.reload();
+            }}
+            whileHover={{ x: isMobile ? 0 : desktopHoverX }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <LogOut size={22} />
+            <motion.span
+              className="inline-block overflow-hidden whitespace-nowrap"
+              initial={false}
+              animate={
+                shouldShowLabels
+                  ? { width: 'auto', opacity: 1, x: 0 }
+                  : { width: 0, opacity: 0, x: collapsedLabelOffset }
+              }
+              transition={{ duration: 0.16, ease: 'easeOut' }}
+            >
+              {t('sidebar.logout')}
+            </motion.span>
+          </motion.button>
+        </div>
+      </motion.aside>
+    </>
   );
 };

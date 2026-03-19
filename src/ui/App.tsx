@@ -3,7 +3,6 @@ import { HashRouter, Routes, Route } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
 import { applyTheme } from './utils/theme';
-import type { ThemeKey } from './utils/theme';
 import { Dashboard } from './pages/Dashboard';
 import { Settings } from './pages/Settings';
 import { Transactions } from './pages/Transactions';
@@ -14,21 +13,135 @@ import { LoansPage } from './pages/Loans';
 import { ImportExportPage } from './pages/ImportExport';
 import { PlansPage } from './pages/Plans';
 import { UsersPage } from './pages/Users';
-import { AuthPage } from './pages/Auth';
-import { ProfileSelectPage } from './pages/ProfileSelect';
+import { ScenariosPage } from './pages/Scenarios';
+import { AlertsPage } from './pages/Alerts';
+import { SettlementPage } from './pages/Settlement';
+import { ReportsPage } from './pages/Reports';
+import { SharingPage } from './pages/Sharing';
+import { SystemStateBar } from './components/SystemStateBar';
 import { useI18n } from './contexts/useI18n';
+import { applyStoredLabCssForProfile, clearLabCssFromDom } from './utils/labStyle';
+
+interface ProfileMeta {
+  id: string;
+  isLab?: boolean;
+}
+
+interface UserMeta {
+  id: string;
+  name?: string;
+  activeProfileId?: string;
+  profiles?: ProfileMeta[];
+}
 
 const App = () => {
-  const [loggedIn, setLoggedIn] = useState<boolean>(false);
-  const [profileReady, setProfileReady] = useState<boolean>(false);
+  const [appReady, setAppReady] = useState<boolean>(false);
+  const [hasActiveUser, setHasActiveUser] = useState<boolean>(false);
   const [currentUserName, setCurrentUserName] = useState<string>('');
   const { t } = useI18n();
 
   useEffect(() => {
-    // Load theme
-    const savedTheme = (localStorage.getItem('theme') as ThemeKey) || 'default';
-    applyTheme(savedTheme);
+    localStorage.setItem('theme', 'dark');
+    applyTheme('dark');
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const bootstrapUser = async () => {
+      if (!window.electron?.invoke) {
+        if (!cancelled) {
+          setHasActiveUser(false);
+          setAppReady(true);
+        }
+        return;
+      }
+
+      try {
+        const data = await window.electron.invoke('user-get-all');
+        if (cancelled) return;
+
+        const authUserId = localStorage.getItem('authUserId');
+        const selectedUser: UserMeta | undefined =
+          data?.users?.find((u: UserMeta) => u.id === authUserId) ||
+          data?.users?.find((u: UserMeta) => u.id === data?.activeUserId) ||
+          data?.users?.[0];
+
+        if (!selectedUser?.id) {
+          setHasActiveUser(false);
+          setCurrentUserName('');
+          return;
+        }
+
+        localStorage.setItem('authUserId', selectedUser.id);
+        if (selectedUser.id !== data?.activeUserId) {
+          await window.electron.invoke('user-set-active', selectedUser.id);
+        }
+
+        setCurrentUserName(selectedUser.name || '');
+        setHasActiveUser(true);
+      } catch {
+        if (!cancelled) {
+          setHasActiveUser(false);
+          setCurrentUserName('');
+        }
+      } finally {
+        if (!cancelled) {
+          setAppReady(true);
+        }
+      }
+    };
+
+    void bootstrapUser();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!appReady || !hasActiveUser || !window.electron?.invoke) {
+      clearLabCssFromDom();
+      return;
+    }
+
+    const syncLabProfileCss = async () => {
+      try {
+        const data = await window.electron.invoke('user-get-all');
+        if (cancelled) return;
+
+        const authUserId = localStorage.getItem('authUserId');
+        const activeUser: UserMeta | undefined =
+          data?.users?.find((u: UserMeta) => u.id === authUserId) ||
+          data?.users?.find((u: UserMeta) => u.id === data?.activeUserId);
+
+        const activeProfile =
+          activeUser?.profiles?.find((profile) => profile.id === activeUser?.activeProfileId) ||
+          activeUser?.profiles?.[0];
+
+        if (!activeUser?.id || !activeProfile?.id) {
+          clearLabCssFromDom();
+          return;
+        }
+
+        localStorage.setItem('activeUserId', activeUser.id);
+        localStorage.setItem('activeProfileId', activeProfile.id);
+        localStorage.setItem('activeProfileIsLab', activeProfile.isLab ? '1' : '0');
+
+        applyStoredLabCssForProfile(activeUser.id, activeProfile.id, Boolean(activeProfile.isLab));
+      } catch {
+        clearLabCssFromDom();
+      }
+    };
+
+    void syncLabProfileCss();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appReady, hasActiveUser]);
 
   useEffect(() => {
     if (!window.electron?.on) return;
@@ -45,34 +158,42 @@ const App = () => {
   }, [t]);
 
   return (
-    <HashRouter>
+    <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <div className="app-container">
         <TitleBar userName={currentUserName} />
-        {!loggedIn ? (
-          <div className="app-auth">
-            <AuthPage onLoggedIn={(name) => { setCurrentUserName(name); setLoggedIn(true); setProfileReady(false); }} />
+        {!appReady ? (
+          <div className="app-auth flex items-center justify-center">
+            <div className="card p-6 text-center">{t('common.loading')}</div>
           </div>
-        ) : !profileReady ? (
-          <div className="app-auth">
-            <ProfileSelectPage onSelected={() => setProfileReady(true)} />
+        ) : !hasActiveUser ? (
+          <div className="app-auth p-6">
+            <UsersPage />
           </div>
         ) : (
           <div className="app-body">
             <Sidebar />
             <main className="main-content">
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/settings" element={<Settings />} />
-                
-                <Route path="/transactions" element={<Transactions />} />
-                <Route path="/budget" element={<BudgetPage />} />
-                <Route path="/goals" element={<GoalsPage />} />
-                <Route path="/bills" element={<BillsPage />} />
-                <Route path="/loans" element={<LoansPage />} />
-                <Route path="/plans" element={<PlansPage />} />
-                <Route path="/users" element={<UsersPage />} />
-                <Route path="/import-export" element={<ImportExportPage />} />
-              </Routes>
+              <SystemStateBar />
+              <div className="route-workspace">
+                <Routes>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/settings" element={<Settings />} />
+                  
+                  <Route path="/transactions" element={<Transactions />} />
+                  <Route path="/budget" element={<BudgetPage />} />
+                  <Route path="/goals" element={<GoalsPage />} />
+                  <Route path="/bills" element={<BillsPage />} />
+                  <Route path="/loans" element={<LoansPage />} />
+                  <Route path="/plans" element={<PlansPage />} />
+                  <Route path="/scenarios" element={<ScenariosPage />} />
+                  <Route path="/alerts" element={<AlertsPage />} />
+                  <Route path="/settlement" element={<SettlementPage />} />
+                  <Route path="/reports" element={<ReportsPage />} />
+                  <Route path="/sharing" element={<SharingPage />} />
+                  <Route path="/users" element={<UsersPage />} />
+                  <Route path="/import-export" element={<ImportExportPage />} />
+                </Routes>
+              </div>
             </main>
           </div>
         )}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 import JSZip from 'jszip';
@@ -38,6 +38,21 @@ export const ImportExportPage = () => {
   const [pendingHeaders, setPendingHeaders] = useState<string[]>([]);
   const [pendingRows, setPendingRows] = useState<string[][]>([]);
   const [pendingFileName, setPendingFileName] = useState<string>('');
+  const [schemaStatus, setSchemaStatus] = useState<{ schemaVersion: number; targetVersion: number; requiresUpgrade: boolean; backupCompletedAt?: string | null } | null>(null);
+
+  const loadSchemaStatus = async () => {
+    if (!window.electron) return;
+    try {
+      const status = await window.electron.invoke('db-get-schema-status');
+      setSchemaStatus(status);
+    } catch {
+      setSchemaStatus(null);
+    }
+  };
+
+  useEffect(() => {
+    loadSchemaStatus();
+  }, []);
 
   const generateTransactionTemplate = () => {
     const template = [
@@ -567,15 +582,76 @@ export const ImportExportPage = () => {
       setZipBusy(true);
       setZipMessage(null);
 
-      const [accounts, categories, transactions, budgets, goals, bills, loans, plans, tax_rules, app_settings] = await Promise.all([
+      const [
+        accounts,
+        categories,
+        subcategories,
+        tags,
+        labels,
+        classification_rules,
+        transactions,
+        transaction_tags,
+        transaction_labels,
+        budgets,
+        goals,
+        goal_contributions,
+        bills,
+        loans,
+        plans,
+        recurring_items,
+        scenarios,
+        alerts,
+        alert_events,
+        monthly_settlements,
+        settlement_events,
+        monthly_reports,
+        report_exports,
+        permissions,
+        share_snapshots,
+        tax_rules,
+        app_settings
+      ] = await Promise.all([
         window.electron.invoke('db-get-accounts'),
         window.electron.invoke('db-get-categories'),
+        window.electron.invoke('db-get-subcategories').catch(() => []),
+        window.electron.invoke('db-get-tags').catch(() => []),
+        window.electron.invoke('db-get-labels').catch(() => []),
+        window.electron.invoke('db-get-classification-rules').catch(() => []),
         window.electron.invoke('db-get-transactions', {}),
+        window.electron.invoke('db-get-transactions', {}).then((txs: Array<{ id: string; tags?: Array<{ id: string }> }>) => {
+          const tagRows: Array<{ transaction_id: string; tag_id: string }> = [];
+          for (const tx of txs || []) {
+            for (const tag of tx.tags || []) {
+              if (tag?.id) tagRows.push({ transaction_id: tx.id, tag_id: tag.id });
+            }
+          }
+          return tagRows;
+        }).catch(() => []),
+        window.electron.invoke('db-get-transactions', {}).then((txs: Array<{ id: string; labels?: Array<{ id: string }> }>) => {
+          const labelRows: Array<{ transaction_id: string; label_id: string }> = [];
+          for (const tx of txs || []) {
+            for (const label of tx.labels || []) {
+              if (label?.id) labelRows.push({ transaction_id: tx.id, label_id: label.id });
+            }
+          }
+          return labelRows;
+        }).catch(() => []),
         window.electron.invoke('db-get-budgets'),
         window.electron.invoke('db-get-goals'),
+        window.electron.invoke('db-get-goal-contributions').catch(() => []),
         window.electron.invoke('db-get-bills'),
         window.electron.invoke('db-get-loans'),
         window.electron.invoke('db-get-plans'),
+        window.electron.invoke('db-get-recurring-items').catch(() => []),
+        window.electron.invoke('db-get-scenarios').catch(() => []),
+        window.electron.invoke('db-get-alerts', { includeResolved: true }).catch(() => []),
+        window.electron.invoke('db-get-alert-events', {}).catch(() => []),
+        window.electron.invoke('db-get-settlements').catch(() => []),
+        window.electron.invoke('db-get-settlement-events', {}).catch(() => []),
+        window.electron.invoke('db-get-reports').catch(() => []),
+        window.electron.invoke('db-get-report-exports', {}).catch(() => []),
+        window.electron.invoke('db-get-permissions').catch(() => []),
+        window.electron.invoke('db-list-share-snapshots', {}).catch(() => []),
         window.electron.invoke('db-get-tax-rules').catch(() => []),
         window.electron.invoke('db-get-app-settings').catch(() => [])
       ]);
@@ -583,12 +659,29 @@ export const ImportExportPage = () => {
       const payload = {
         accounts,
         categories,
+        subcategories,
+        tags,
+        labels,
+        classification_rules,
         transactions,
+        transaction_tags,
+        transaction_labels,
         budgets,
         goals,
+        goal_contributions,
         bills,
         loans,
         plans,
+        recurring_items,
+        scenarios,
+        alerts,
+        alert_events,
+        monthly_settlements,
+        settlement_events,
+        monthly_reports,
+        report_exports,
+        permissions,
+        share_snapshots,
         tax_rules,
         app_settings
       };
@@ -605,6 +698,9 @@ export const ImportExportPage = () => {
         setZipMessage(t('import.exportCanceled'));
         return;
       }
+
+      await window.electron.invoke('db-mark-v2-backup-complete', { filePath: saveResult?.filePath || defaultPath });
+      await loadSchemaStatus();
 
       if (resetAfter) {
         await window.electron.invoke('db-reset-all');
@@ -649,8 +745,43 @@ export const ImportExportPage = () => {
   };
 
   return (
-    <div className="min-h-screen w-full max-w-5xl mx-auto px-6 py-6 flex flex-col gap-6">
+    <div className="h-full w-full max-w-5xl mx-auto px-6 py-4 flex flex-col gap-4 overflow-hidden">
       <h2 className="text-3xl font-bold font-heading mb-6">{t('import.title')}</h2>
+
+      <div className="card mb-2">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="text-xl font-bold">Schema Upgrade Status</h3>
+            <p className="text-sm text-gray-600">
+              Version {schemaStatus?.schemaVersion ?? 1} / target {schemaStatus?.targetVersion ?? 2}
+            </p>
+            <p className="text-xs text-gray-500">
+              Requires V2 upgrade: {schemaStatus?.requiresUpgrade ? 'yes' : 'no'} | Backup marked: {schemaStatus?.backupCompletedAt ? new Date(schemaStatus.backupCompletedAt).toLocaleString() : 'no'}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button className="btn bg-gray-100" onClick={loadSchemaStatus}>Refresh</button>
+            <button
+              className={`btn text-white ${schemaStatus?.requiresUpgrade ? 'bg-orange-500' : 'bg-gray-400'}`}
+              disabled={!schemaStatus?.requiresUpgrade}
+              onClick={async () => {
+                if (!window.electron) return;
+                const confirmed = confirm('Run V2 upgrade now? This will reset data after backup.');
+                if (!confirmed) return;
+                try {
+                  await window.electron.invoke('db-complete-v2-upgrade');
+                  await loadSchemaStatus();
+                  setZipMessage('V2 upgrade completed.');
+                } catch (error) {
+                  setZipMessage(error instanceof Error ? error.message : 'V2 upgrade failed.');
+                }
+              }}
+            >
+              Complete V2 Upgrade
+            </button>
+          </div>
+        </div>
+      </div>
 
       <div className="card mb-6 zip-card">
         <div className="flex items-center gap-2 mb-4">

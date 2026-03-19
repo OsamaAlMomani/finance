@@ -11,8 +11,8 @@ export default {
         // But we are using CSS variables mostly. 
       },
       fontFamily: {
-        hand: ['Patrick Hand', 'cursive'],
-        heading: ['Caveat', 'cursive'],
+        hand: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        heading: ['Exo 2', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       }
     },
   },

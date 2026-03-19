@@ -1,18 +1,32 @@
-import { app, BrowserWindow, ipcMain, Menu, globalShortcut, dialog } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 import { initDatabase, switchDatabase } from '../services/databaseService.js';
 import { registerIpcHandlers } from './ipcHandlers.js';
+
+const require = createRequire(import.meta.url);
+const { app, BrowserWindow, ipcMain, Menu, globalShortcut, dialog } = require('electron');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const isDev = !app.isPackaged;
+const isSmokeMode = process.argv.includes('--smoke-ipc');
+const isBrokenPipeError = (error) => error?.code === 'EPIPE' || error?.code === 'ERR_STREAM_DESTROYED';
+
+const guardProcessStream = (stream) => {
+  if (!stream?.on) return;
+  stream.on('error', (error) => {
+    if (isBrokenPipeError(error)) return;
+  });
+};
+
+guardProcessStream(process.stdout);
+guardProcessStream(process.stderr);
 
 let mainWindow;
-let dbInstance;
 let menuVisible = true;
 let appMenu = null;
 
@@ -125,6 +139,23 @@ const getProfileDbPath = (userId, profileId) => {
   return path.join(dir, `${profileId}.db`);
 };
 
+const hasLabProfile = (user) => (user?.profiles || []).some((profile) => Boolean(profile?.isLab));
+
+const getRendererIndexPath = () => {
+  const candidates = [
+    path.join(__dirname, '../../react-dist/index.html'),
+    path.join(__dirname, '../../dist/index.html')
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return candidates[0];
+};
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -137,7 +168,7 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: false 
     },
-    title: 'SketchBoard Finance Pro'
+    title: 'Stock Tracker'
   });
 
   if (isDev) {
@@ -145,12 +176,12 @@ function createWindow() {
     mainWindow.loadURL(devUrl);
 
     mainWindow.webContents.on('did-fail-load', () => {
-      mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
+      mainWindow.loadFile(getRendererIndexPath());
     });
 
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
+    mainWindow.loadFile(getRendererIndexPath());
   }
 }
 
@@ -159,7 +190,7 @@ app.whenReady().then(() => {
   const usersData = loadUsers();
   let { activeUserId, users } = usersData;
   if (!activeUserId) {
-    const defaultProfile = { id: crypto.randomUUID(), name: 'Default Profile', created_at: new Date().toISOString() };
+    const defaultProfile = { id: crypto.randomUUID(), name: 'Default Profile', created_at: new Date().toISOString(), isLab: false };
     const defaultUser = {
       id: crypto.randomUUID(),
       name: 'Default',
@@ -174,7 +205,7 @@ app.whenReady().then(() => {
 
   const activeUser = users.find(u => u.id === activeUserId) || users[0];
   if (activeUser && (!activeUser.profiles || activeUser.profiles.length === 0)) {
-    const defaultProfile = { id: crypto.randomUUID(), name: 'Default Profile', created_at: new Date().toISOString() };
+    const defaultProfile = { id: crypto.randomUUID(), name: 'Default Profile', created_at: new Date().toISOString(), isLab: false };
     activeUser.profiles = [defaultProfile];
     activeUser.activeProfileId = defaultProfile.id;
     saveUsers({ activeUserId: activeUser.id, users });
@@ -184,10 +215,17 @@ app.whenReady().then(() => {
   const dbPath = getProfileDbPath(activeUser.id, activeProfileId);
   console.log('Initializing database at:', dbPath);
   try {
-    dbInstance = initDatabase(dbPath);
-    registerIpcHandlers();
+    initDatabase(dbPath);
+    registerIpcHandlers(ipcMain);
   } catch (error) {
     console.error("Failed to initialize database:", error);
+  }
+
+  if (isSmokeMode) {
+    console.log('[SMOKE] Electron main process booted.');
+    console.log('[SMOKE] IPC handlers registered.');
+    app.quit();
+    return;
   }
 
   createWindow();
@@ -210,7 +248,7 @@ ipcMain.handle('user-get-all', () => {
 
 ipcMain.handle('user-create', (e, name, avatar) => {
   const data = loadUsers();
-  const defaultProfile = { id: crypto.randomUUID(), name: 'Default Profile', created_at: new Date().toISOString() };
+  const defaultProfile = { id: crypto.randomUUID(), name: 'Default Profile', created_at: new Date().toISOString(), isLab: false };
   const newUser = {
     id: crypto.randomUUID(),
     name: name || 'User',
@@ -235,15 +273,26 @@ ipcMain.handle('user-set-active', (e, userId) => {
   const user = data.users.find(u => u.id === userId);
   const profileId = user?.activeProfileId || user?.profiles?.[0]?.id;
   const dbPath = getProfileDbPath(userId, profileId);
-  dbInstance = switchDatabase(dbPath);
+  switchDatabase(dbPath);
   return data;
 });
 
-ipcMain.handle('profile-create', (e, userId, name, avatar) => {
+ipcMain.handle('profile-create', (e, userId, name, avatar, options = {}) => {
   const data = loadUsers();
   const user = data.users?.find(u => u.id === userId);
   if (!user) throw new Error('User not found');
-  const newProfile = { id: crypto.randomUUID(), name: name || 'Profile', created_at: new Date().toISOString(), avatar: avatar || null };
+  const isLab = Boolean(options?.isLab);
+  if (isLab && hasLabProfile(user)) {
+    throw new Error('Lab profile already exists for this user');
+  }
+  const resolvedName = (name || '').trim() || (isLab ? 'Design Lab' : 'Profile');
+  const newProfile = {
+    id: crypto.randomUUID(),
+    name: resolvedName,
+    created_at: new Date().toISOString(),
+    avatar: avatar || null,
+    isLab
+  };
   user.profiles = [...(user.profiles || []), newProfile];
   if (!user.activeProfileId) user.activeProfileId = newProfile.id;
   saveUsers(data);
@@ -278,7 +327,7 @@ ipcMain.handle('profile-set-active', (e, userId, profileId) => {
   user.activeProfileId = profileId;
   saveUsers(data);
   const dbPath = getProfileDbPath(userId, profileId);
-  dbInstance = switchDatabase(dbPath);
+  switchDatabase(dbPath);
   return data;
 });
 

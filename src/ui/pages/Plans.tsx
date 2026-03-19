@@ -174,7 +174,7 @@ export const PlansPage = () => {
   if (loading) return <div>{t('common.loading')}</div>;
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col overflow-hidden">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-3xl font-bold font-heading">{t('plans.title')}</h2>
         <button onClick={() => handleOpenModal()} className="btn bg-indigo-500 text-white flex items-center gap-2">
@@ -182,7 +182,7 @@ export const PlansPage = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 min-h-0 overflow-y-auto pr-1">
         {plans.map(plan => (
           <div key={plan.id} className="card relative overflow-hidden group">
             <div className="flex justify-between items-start mb-3">

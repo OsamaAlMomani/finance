@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 280" role="img" aria-labelledby="title desc">
+  <title id="title">Stock Tracker Logo</title>
+  <desc id="desc">Stock Tracker wordmark with shield and upward arrow symbol.</desc>
+  <defs>
+    <linearGradient id="shieldEdge" x1="8%" y1="4%" x2="92%" y2="96%">
+      <stop offset="0%" stop-color="#f8fbff"/>
+      <stop offset="45%" stop-color="#b6c5e4"/>
+      <stop offset="100%" stop-color="#8798bd"/>
+    </linearGradient>
+    <linearGradient id="shieldInner" x1="12%" y1="8%" x2="88%" y2="92%">
+      <stop offset="0%" stop-color="#123a9d"/>
+      <stop offset="52%" stop-color="#0a2976"/>
+      <stop offset="100%" stop-color="#071f56"/>
+    </linearGradient>
+    <linearGradient id="arrowFill" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="45%" stop-color="#d7e3ff"/>
+      <stop offset="100%" stop-color="#9eaecf"/>
+    </linearGradient>
+    <linearGradient id="nameFill" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0f4ad8"/>
+      <stop offset="100%" stop-color="#21b4ff"/>
+    </linearGradient>
+    <filter id="logoGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="
+        0 0 0 0 0.17
+        0 0 0 0 0.72
+        0 0 0 0 1
+        0 0 0 0.42 0" result="glow"/>
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <g transform="translate(18,16)" filter="url(#logoGlow)">
+    <path d="M128 0L236 50L218 188L128 262L38 188L20 50Z" fill="url(#shieldEdge)"/>
+    <path d="M128 22L214 62L200 176L128 234L56 176L42 62Z" fill="url(#shieldInner)"/>
+    <circle cx="128" cy="114" r="44" fill="#dce7ff"/>
+    <circle cx="128" cy="114" r="37" fill="#1f87f6"/>
+    <text x="128" y="130" text-anchor="middle" font-family="'Segoe UI Black', 'Arial Black', sans-serif" font-size="58" fill="#f7fbff">$</text>
+    <path
+      d="M44 176C86 149 125 128 162 111L162 83L242 128L162 173L162 144C127 160 87 180 44 196Z"
+      fill="url(#arrowFill)"
+      stroke="#7688b3"
+      stroke-width="3"
+      stroke-linejoin="round"
+    />
+  </g>
+
+  <g transform="translate(300,36)">
+    <text x="0" y="102" font-family="'Exo 2', 'Segoe UI', sans-serif" font-size="84" font-weight="800" fill="url(#nameFill)" letter-spacing="1">Stock</text>
+    <text x="0" y="188" font-family="'Exo 2', 'Segoe UI', sans-serif" font-size="84" font-weight="800" fill="#0e1f4f" letter-spacing="1">Tracker</text>
+    <text x="4" y="222" font-family="'Exo 2', 'Segoe UI', sans-serif" font-size="24" font-weight="600" fill="#3d5a9a" letter-spacing="4">SHIELDED MARKET INTELLIGENCE</text>
+  </g>
+</svg>

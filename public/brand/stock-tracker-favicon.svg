@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title">
+  <title id="title">Stock Tracker Icon</title>
+  <defs>
+    <linearGradient id="edge" x1="10%" y1="6%" x2="90%" y2="94%">
+      <stop offset="0%" stop-color="#f8fbff"/>
+      <stop offset="100%" stop-color="#9fb2d8"/>
+    </linearGradient>
+    <linearGradient id="core" x1="12%" y1="8%" x2="88%" y2="92%">
+      <stop offset="0%" stop-color="#1550d7"/>
+      <stop offset="100%" stop-color="#0a2a79"/>
+    </linearGradient>
+  </defs>
+  <path d="M48 4L84 20L78 68L48 92L18 68L12 20Z" fill="url(#edge)"/>
+  <path d="M48 12L78 26L73 63L48 83L23 63L18 26Z" fill="url(#core)"/>
+  <path d="M18 64C32 54 45 47 58 41L58 30L84 48L58 66L58 55C45 60 31 67 18 72Z" fill="#eef4ff" stroke="#6f83af" stroke-width="1.5" stroke-linejoin="round"/>
+</svg>

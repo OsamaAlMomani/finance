@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from '../contexts/useI18n';
+import { ThemeQuickSwitch } from './ThemeQuickSwitch';
+import { BrandBadge } from './BrandBadge';
 
 export const TitleBar = ({ userName }: { userName?: string }) => {
   const { t } = useI18n();
@@ -47,10 +49,12 @@ export const TitleBar = ({ userName }: { userName?: string }) => {
   return (
     <div className="titlebar">
       <div className="titlebar-drag">
+        <BrandBadge compact className="titlebar-brand-mini" showTagline={false} />
         <div className="titlebar-user">{userName || loadedName || t('titlebar.userFallback')}</div>
       </div>
 
       <div className="titlebar-controls">
+        <ThemeQuickSwitch />
         <div className="titlebar-help">
           <button
             className="titlebar-help-btn"

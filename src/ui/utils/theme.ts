@@ -1,28 +1,20 @@
-export type ThemeKey = 'default' | 'girly' | 'men' | 'dark' | 'light' | 'moonlight' | 'darknight' | 'sunshine';
+export type ThemeKey = 'dark';
 
-const THEME_CLASSES: Record<ThemeKey, string | null> = {
-  default: null,
-  girly: 'girly-theme',
-  men: 'men-theme',
-  dark: 'dark-theme',
-  light: 'light-theme',
-  moonlight: 'moonlight-theme',
-  darknight: 'darknight-theme',
-  sunshine: 'sunshine-theme'
-};
+export const resolveTheme = (_rawTheme: string | null): ThemeKey => 'dark';
 
-export const applyTheme = (theme: ThemeKey) => {
+export const applyTheme = (_themeInput: ThemeKey | string | null) => {
   const classList = document.body.classList;
   classList.remove(
+    'default-theme',
+    'female-theme',
     'girly-theme',
+    'male-theme',
     'men-theme',
-    'dark-theme',
-    'light-theme',
     'moonlight-theme',
     'darknight-theme',
-    'sunshine-theme'
+    'sunshine-theme',
+    'nature-theme',
+    'royal-theme'
   );
-
-  const cls = THEME_CLASSES[theme];
-  if (cls) classList.add(cls);
+  classList.add('dark-theme');
 };

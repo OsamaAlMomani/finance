@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 react-dist
+tmp_pdf_extract/
+docs/logs/
 *.local
 Release/
 release/
@@ -19,6 +21,9 @@ archive/
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/settings.json
 .idea
 .DS_Store
 *.suo

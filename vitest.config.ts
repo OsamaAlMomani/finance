@@ -82,9 +82,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
       '@ui': path.resolve(__dirname, './src/ui'),
       '@components': path.resolve(__dirname, './src/ui/components'),
-      '@hooks': path.resolve(__dirname, './src/ui/hooks'),
-      '@services': path.resolve(__dirname, './src/services'),
-      '@utils': path.resolve(__dirname, './src/utils')
+      '@services': path.resolve(__dirname, './src/services')
     }
   },
   resolve: {
@@ -92,9 +90,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
       '@ui': path.resolve(__dirname, './src/ui'),
       '@components': path.resolve(__dirname, './src/ui/components'),
-      '@hooks': path.resolve(__dirname, './src/ui/hooks'),
-      '@services': path.resolve(__dirname, './src/services'),
-      '@utils': path.resolve(__dirname, './src/utils')
+      '@services': path.resolve(__dirname, './src/services')
     }
   }
 })

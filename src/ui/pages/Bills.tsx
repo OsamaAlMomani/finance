@@ -77,7 +77,7 @@ export const BillsPage = () => {
     };
 
     return (
-        <div className="h-full">
+        <div className="h-full flex flex-col overflow-hidden">
              <div className="flex justify-between items-center mb-6">
                 <h2 className="text-3xl font-bold font-heading">{t('bills.title')}</h2>
                 <button onClick={() => handleOpenModal()} className="btn bg-red-400 text-white flex items-center gap-2">
@@ -85,7 +85,7 @@ export const BillsPage = () => {
                 </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 flex-1 min-h-0 overflow-y-auto pr-1">
                 {bills.map(b => (
                     <div key={b.id} className={`card flex items-center justify-between p-4 group ${b.is_paid ? 'opacity-60 bg-gray-50' : 'border-l-4 border-red-400'}`}>
                         <div className="flex items-center gap-4">

@@ -9,6 +9,19 @@ interface Goal {
   target_amount: number;
   current_amount: number;
   target_date: string;
+  goal_type?: 'standard' | 'mission_capital';
+  priority?: 'low' | 'medium' | 'high';
+  funding_source?: string;
+  risk_status?: string;
+}
+
+interface GoalContribution {
+  id: string;
+  goal_id: string;
+  amount: number;
+  date: string;
+  source_type: string;
+  notes?: string;
 }
 
 export const GoalsPage = () => {
@@ -19,21 +32,38 @@ export const GoalsPage = () => {
     const [showProgressModal, setShowProgressModal] = useState(false);
     const [progressGoal, setProgressGoal] = useState<Goal | null>(null);
     const [progressAmount, setProgressAmount] = useState('');
+    const [contributions, setContributions] = useState<GoalContribution[]>([]);
     const [newGoal, setNewGoal] = useState({
         name: '',
         target: '',
         date: '',
-        current: '0'
+        current: '0',
+        goal_type: 'standard',
+        priority: 'medium',
+        funding_source: '',
+        risk_status: 'normal'
     });
 
     const loadGoals = () => {
         if(window.electron) {
-            window.electron.invoke('db-get-goals').then(setGoals);
+            Promise.all([
+              window.electron.invoke('db-get-goals'),
+              window.electron.invoke('db-get-goal-contributions').catch(() => [])
+            ]).then(([goalsData, contributionsData]) => {
+              setGoals(goalsData);
+              setContributions(Array.isArray(contributionsData) ? contributionsData : []);
+            });
         }
     };
 
     useEffect(() => {
         loadGoals();
+    }, []);
+
+    useEffect(() => {
+        const onChanged = () => loadGoals();
+        window.addEventListener('finance:data-changed', onChanged);
+        return () => window.removeEventListener('finance:data-changed', onChanged);
     }, []);
 
     const handleOpenModal = (goal?: Goal) => {
@@ -43,11 +73,15 @@ export const GoalsPage = () => {
                 name: goal.name,
                 target: goal.target_amount.toString(),
                 date: goal.target_date,
-                current: goal.current_amount.toString()
+                current: goal.current_amount.toString(),
+                goal_type: goal.goal_type || 'standard',
+                priority: goal.priority || 'medium',
+                funding_source: goal.funding_source || '',
+                risk_status: goal.risk_status || 'normal'
             });
         } else {
             setEditingGoal(null);
-            setNewGoal({ name: '', target: '', date: '', current: '0' });
+            setNewGoal({ name: '', target: '', date: '', current: '0', goal_type: 'standard', priority: 'medium', funding_source: '', risk_status: 'normal' });
         }
         setShowModal(true);
     };
@@ -64,7 +98,11 @@ export const GoalsPage = () => {
                 target_amount: parseFloat(newGoal.target),
                 target_date: newGoal.date,
                 current_amount: parseFloat(newGoal.current),
-                linked_account_id: null
+                linked_account_id: null,
+                goal_type: newGoal.goal_type,
+                priority: newGoal.priority,
+                funding_source: newGoal.funding_source || null,
+                risk_status: newGoal.risk_status
             });
         } else {
             // Create new goal
@@ -74,10 +112,15 @@ export const GoalsPage = () => {
                 target_amount: parseFloat(newGoal.target),
                 target_date: newGoal.date,
                 current_amount: parseFloat(newGoal.current),
-                linked_account_id: null
+                linked_account_id: null,
+                goal_type: newGoal.goal_type,
+                priority: newGoal.priority,
+                funding_source: newGoal.funding_source || null,
+                risk_status: newGoal.risk_status
             });
         }
         setShowModal(false);
+        window.dispatchEvent(new CustomEvent('finance:data-changed'));
         loadGoals();
     };
 
@@ -98,9 +141,14 @@ export const GoalsPage = () => {
             target_amount: progressGoal.target_amount,
             target_date: progressGoal.target_date,
             current_amount: newAmount,
-            linked_account_id: null
+            linked_account_id: null,
+            goal_type: progressGoal.goal_type || 'standard',
+            priority: progressGoal.priority || 'medium',
+            funding_source: progressGoal.funding_source || null,
+            risk_status: progressGoal.risk_status || 'normal'
         });
         setShowProgressModal(false);
+        window.dispatchEvent(new CustomEvent('finance:data-changed'));
         loadGoals();
     };
 
@@ -108,11 +156,12 @@ export const GoalsPage = () => {
         if (!confirm(t('goals.deleteConfirm'))) return;
         if (!window.electron) return;
         await window.electron.invoke('db-delete-goal', id);
+        window.dispatchEvent(new CustomEvent('finance:data-changed'));
         loadGoals();
     };
 
     return (
-        <div className="h-full">
+        <div className="h-full flex flex-col overflow-hidden">
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-3xl font-bold font-heading">{t('goals.title')}</h2>
                 <button onClick={() => handleOpenModal()} className="btn bg-purple-500 text-white flex items-center gap-2">
@@ -120,9 +169,10 @@ export const GoalsPage = () => {
                 </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 flex-1 min-h-0 overflow-y-auto pr-1">
                 {goals.map(g => {
                     const percent = Math.min((g.current_amount / g.target_amount) * 100, 100);
+                    const goalContribs = contributions.filter((entry) => entry.goal_id === g.id).slice(0, 3);
                     return (
                         <div key={g.id} className="card border-t-8 border-purple-400 group relative">
                              <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -156,6 +206,12 @@ export const GoalsPage = () => {
                                 </span>
                              </div>
 
+                             <div className="text-xs text-gray-500 mb-2">
+                                <span className="font-semibold">Type:</span> {g.goal_type || 'standard'} | <span className="font-semibold">Priority:</span> {g.priority || 'medium'}
+                                <br />
+                                <span className="font-semibold">Funding:</span> {g.funding_source || 'manual'} | <span className="font-semibold">Risk:</span> {g.risk_status || 'normal'}
+                             </div>
+
                              <progress
                                  className="progress-bar category-color--purple-500 mb-4"
                                  value={percent}
@@ -179,6 +235,16 @@ export const GoalsPage = () => {
                              >
                                           <TrendingUp size={16} /> {t('goals.addProgress')}
                              </button>
+
+                             <div className="mt-3 text-xs text-gray-600">
+                                <p className="font-bold">Recent contributions</p>
+                                <ul className="list-disc ml-4">
+                                  {goalContribs.map((entry) => (
+                                    <li key={entry.id}>{Number(entry.amount).toFixed(2)} on {entry.date}</li>
+                                  ))}
+                                  {goalContribs.length === 0 && <li>No contributions yet</li>}
+                                </ul>
+                             </div>
                         </div>
                     );
                 })}
@@ -234,6 +300,58 @@ export const GoalsPage = () => {
                                         value={newGoal.current}
                                         onChange={e => setNewGoal({...newGoal, current: e.target.value})}
                                     />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label htmlFor="goal-type" className="text-xs font-bold text-gray-500">Goal Type</label>
+                                    <select
+                                        id="goal-type"
+                                        className="w-full p-2 border rounded font-hand text-lg"
+                                        value={newGoal.goal_type}
+                                        onChange={e => setNewGoal({ ...newGoal, goal_type: e.target.value })}
+                                    >
+                                        <option value="standard">standard</option>
+                                        <option value="mission_capital">mission_capital</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label htmlFor="goal-priority" className="text-xs font-bold text-gray-500">Priority</label>
+                                    <select
+                                        id="goal-priority"
+                                        className="w-full p-2 border rounded font-hand text-lg"
+                                        value={newGoal.priority}
+                                        onChange={e => setNewGoal({ ...newGoal, priority: e.target.value })}
+                                    >
+                                        <option value="low">low</option>
+                                        <option value="medium">medium</option>
+                                        <option value="high">high</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label htmlFor="goal-funding" className="text-xs font-bold text-gray-500">Funding Source</label>
+                                    <input
+                                        id="goal-funding"
+                                        className="w-full p-2 border rounded font-hand text-lg"
+                                        placeholder="salary / transfer / surplus"
+                                        value={newGoal.funding_source}
+                                        onChange={e => setNewGoal({ ...newGoal, funding_source: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label htmlFor="goal-risk" className="text-xs font-bold text-gray-500">Risk Status</label>
+                                    <select
+                                        id="goal-risk"
+                                        className="w-full p-2 border rounded font-hand text-lg"
+                                        value={newGoal.risk_status}
+                                        onChange={e => setNewGoal({ ...newGoal, risk_status: e.target.value })}
+                                    >
+                                        <option value="normal">normal</option>
+                                        <option value="watch">watch</option>
+                                        <option value="at_risk">at_risk</option>
+                                    </select>
                                 </div>
                             </div>
                             <div className="flex gap-2 mt-4">

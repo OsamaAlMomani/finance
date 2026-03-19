@@ -21,10 +21,30 @@ interface Category {
   type: string;
 }
 
+interface TransactionItem {
+  id: string;
+  category_id: string;
+  amount: number;
+  merchant: string;
+  date: string;
+  type: 'income' | 'expense' | 'transfer';
+}
+
+interface AlertItem {
+  id: string;
+  source_type: string;
+  source_id: string;
+  message: string;
+  severity: string;
+  status: string;
+}
+
 export const BudgetPage = () => {
   const { t } = useI18n();
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
@@ -39,16 +59,26 @@ export const BudgetPage = () => {
     loadData();
   }, []);
 
+  useEffect(() => {
+    const onChanged = () => loadData();
+    window.addEventListener('finance:data-changed', onChanged);
+    return () => window.removeEventListener('finance:data-changed', onChanged);
+  }, []);
+
   const loadData = async () => {
     if(!window.electron) return;
     try {
         // Parallel fetch
-        const [buds, cats] = await Promise.all([
+        const [buds, cats, txs, alertsData] = await Promise.all([
             window.electron.invoke('db-get-budgets'),
-            window.electron.invoke('db-get-categories')
+            window.electron.invoke('db-get-categories'),
+            window.electron.invoke('db-get-transactions', {}),
+            window.electron.invoke('db-get-alerts', { includeResolved: false }).catch(() => [])
         ]);
         setBudgets(buds);
         setCategories(cats);
+        setTransactions(Array.isArray(txs) ? txs : []);
+        setAlerts(Array.isArray(alertsData) ? alertsData : []);
         if(cats.length > 0) setNewBudget(p => ({...p, categoryId: cats[0].id}));
     } catch(e) {
         console.error(e);
@@ -88,6 +118,7 @@ export const BudgetPage = () => {
     });
     
     setShowModal(false);
+    window.dispatchEvent(new CustomEvent('finance:data-changed'));
     loadData();
   };
 
@@ -95,13 +126,14 @@ export const BudgetPage = () => {
     if (!confirm(t('budget.deleteConfirm'))) return;
     if (!window.electron) return;
     await window.electron.invoke('db-delete-budget', id);
+    window.dispatchEvent(new CustomEvent('finance:data-changed'));
     loadData();
   };
 
   if (loading) return <div>{t('budget.loading')}</div>;
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col overflow-hidden">
        <div className="flex justify-between items-center mb-6">
         <h2 className="text-3xl font-bold font-heading">{t('budget.title')}</h2>
         <button onClick={() => handleOpenModal()} className="btn bg-green-500 text-white flex items-center gap-2">
@@ -109,12 +141,17 @@ export const BudgetPage = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 min-h-0 overflow-y-auto pr-1">
         {budgets.map(b => {
              const spent = b.spent || 0;
              const percentage = Math.min((spent / b.limit_amount) * 100, 100);
              const isExceeded = spent > b.limit_amount;
              const isNearLimit = spent > b.limit_amount * 0.9 && !isExceeded;
+             const topTransactions = transactions
+               .filter((tx) => tx.type === 'expense' && tx.category_id === b.category_id)
+               .sort((a, c) => c.amount - a.amount)
+               .slice(0, 3);
+             const relatedAlerts = alerts.filter((alert) => alert.source_type === 'budget' && String(alert.source_id || '').includes(b.id));
              return (
                 <div key={b.id} className={`card relative overflow-hidden group ${
                   isExceeded ? 'border-2 border-red-500 bg-red-50' : 
@@ -180,6 +217,18 @@ export const BudgetPage = () => {
                             value={percentage}
                             max={100}
                           />
+
+                    <div className="mt-3 text-xs text-gray-600">
+                      <p className="font-bold mb-1">Connected Details</p>
+                      <p>Top transactions:</p>
+                      <ul className="ml-4 list-disc">
+                        {topTransactions.map((tx) => (
+                          <li key={tx.id}>{tx.merchant || 'Expense'} - ${Number(tx.amount).toFixed(2)} ({tx.date})</li>
+                        ))}
+                        {topTransactions.length === 0 && <li>No matching expenses</li>}
+                      </ul>
+                      <p className="mt-2">Related alerts: {relatedAlerts.length}</p>
+                    </div>
                 </div>
              );
         })}

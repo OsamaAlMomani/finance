@@ -12,9 +12,7 @@
       "@/*": ["src/*"],
       "@ui/*": ["src/ui/*"],
       "@components/*": ["src/ui/components/*"],
-      "@hooks/*": ["src/ui/hooks/*"],
-      "@services/*": ["src/services/*"],
-      "@utils/*": ["src/utils/*"]
+      "@services/*": ["src/services/*"]
     }
   },
   "include": ["tests/**/*", "vitest.config.ts", "src/**/*"]
