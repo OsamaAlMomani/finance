@@ -51,7 +51,7 @@ export default defineConfig({
     navigationTimeout: 30000,
   },
   
-  // Configure projects for major browsers
+  // Configure desktop projects
   projects: [
     {
       name: 'chromium',
@@ -64,15 +64,6 @@ export default defineConfig({
     {
       name: 'webkit',
       use: { ...devices['Desktop Safari'] },
-    },
-    // Mobile viewport testing
-    {
-      name: 'Mobile Chrome',
-      use: { ...devices['Pixel 5'] },
-    },
-    {
-      name: 'Mobile Safari',
-      use: { ...devices['iPhone 12'] },
     },
   ],
   

@@ -104,7 +104,6 @@ const getTags = (db) => {
 };
 
 const deleteTag = (db, id) => {
-  db.prepare('DELETE FROM transaction_tags WHERE tag_id = ?').run(id);
   db.prepare('DELETE FROM tags WHERE id = ?').run(id);
 };
 
@@ -133,7 +132,6 @@ const getLabels = (db) => {
 };
 
 const deleteLabel = (db, id) => {
-  db.prepare('DELETE FROM transaction_labels WHERE label_id = ?').run(id);
   db.prepare('DELETE FROM labels WHERE id = ?').run(id);
 };
 

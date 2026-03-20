@@ -12,6 +12,8 @@ dist
 react-dist
 tmp_pdf_extract/
 docs/logs/
+playwright-report/
+test-results/
 *.local
 Release/
 release/

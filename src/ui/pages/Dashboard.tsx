@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import {
   DollarSign,
@@ -53,6 +53,33 @@ interface PlanInsight {
   months_overdue?: number | null;
 }
 
+interface CashCollisionDriver {
+  sourceType?: string;
+  sourceId?: string;
+  name?: string;
+  amount?: number;
+}
+
+interface CashCollisionItem {
+  date: string;
+  daysAway: number;
+  projectedBalance: number;
+  deficit: number;
+  severity: string;
+  drivers: CashCollisionDriver[];
+}
+
+interface CashCollisionForecast {
+  asOf: string;
+  horizonDays: number;
+  startBalance: number;
+  projectedEndBalance: number;
+  baselineDailyIncome: number;
+  expectedIncome: number;
+  expectedDebits: number;
+  collisions: CashCollisionItem[];
+}
+
 type SuggestionTone = 'critical' | 'warning' | 'info' | 'positive';
 
 interface SuggestionItem {
@@ -94,6 +121,36 @@ const normalizeStats = (input: unknown): DashboardStats => {
   };
 };
 
+const normalizeCollisionForecast = (input: unknown): CashCollisionForecast => {
+  const raw = (input || {}) as Partial<CashCollisionForecast>;
+  const collisions = Array.isArray(raw.collisions) ? raw.collisions : [];
+
+  return {
+    asOf: String(raw.asOf || ''),
+    horizonDays: Math.max(0, toNumber(raw.horizonDays) || 30),
+    startBalance: toNumber(raw.startBalance),
+    projectedEndBalance: toNumber(raw.projectedEndBalance),
+    baselineDailyIncome: toNumber(raw.baselineDailyIncome),
+    expectedIncome: toNumber(raw.expectedIncome),
+    expectedDebits: toNumber(raw.expectedDebits),
+    collisions: collisions.map((collision) => ({
+      date: String(collision?.date || ''),
+      daysAway: Math.max(0, toNumber(collision?.daysAway)),
+      projectedBalance: toNumber(collision?.projectedBalance),
+      deficit: toNumber(collision?.deficit),
+      severity: String(collision?.severity || 'warning'),
+      drivers: Array.isArray(collision?.drivers)
+        ? collision.drivers.map((driver) => ({
+            sourceType: String(driver?.sourceType || ''),
+            sourceId: String(driver?.sourceId || ''),
+            name: String(driver?.name || ''),
+            amount: toNumber(driver?.amount)
+          }))
+        : []
+    }))
+  };
+};
+
 export const Dashboard = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -108,6 +165,10 @@ export const Dashboard = () => {
   const [featureHealth, setFeatureHealth] = useState<FeatureHealthItem[]>([]);
   const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
   const [advisorError, setAdvisorError] = useState('');
+  const [collisionForecast, setCollisionForecast] = useState<CashCollisionForecast>(
+    normalizeCollisionForecast(undefined)
+  );
+  const [collisionError, setCollisionError] = useState('');
   const [advisorRefreshing, setAdvisorRefreshing] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
@@ -118,7 +179,7 @@ export const Dashboard = () => {
     initial_balance: ''
   });
 
-  const buildFeatureHealth = (
+  const buildFeatureHealth = useCallback((
     budgetsReady: boolean,
     plansReady: boolean,
     budgetCount: number,
@@ -144,9 +205,9 @@ export const Dashboard = () => {
           : t('dashboard.advisor.feature.empty')
         : t('dashboard.advisor.feature.failed')
     }
-  ];
+  ], [t]);
 
-  const buildSuggestions = (
+  const buildSuggestions = useCallback((
     budgets: BudgetInsight[],
     plans: PlanInsight[],
     budgetsReady: boolean,
@@ -288,9 +349,9 @@ export const Dashboard = () => {
     }
 
     return next.slice(0, 4);
-  };
+  }, [t]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!window.electron) {
       setStats({
         totalBalance: 0,
@@ -300,6 +361,8 @@ export const Dashboard = () => {
         activeAlerts: 0
       });
       setAccounts([]);
+      setCollisionForecast(normalizeCollisionForecast(undefined));
+      setCollisionError(t('dashboard.collision.noBackend'));
       setAdvisorError(t('dashboard.advisor.noBackend'));
       setFeatureHealth(
         buildFeatureHealth(false, false, 0, 0).map((item) => ({
@@ -323,11 +386,12 @@ export const Dashboard = () => {
 
     setAdvisorRefreshing(true);
     try {
-      const [statsResult, accountsResult, budgetsResult, plansResult] = await Promise.allSettled([
+      const [statsResult, accountsResult, budgetsResult, plansResult, collisionResult] = await Promise.allSettled([
         window.electron.invoke('db-get-dashboard-stats'),
         window.electron.invoke('db-get-accounts-with-balance'),
         window.electron.invoke('db-get-budgets'),
-        window.electron.invoke('db-get-plans')
+        window.electron.invoke('db-get-plans'),
+        window.electron.invoke('db-get-cash-collision-forecast', { horizonDays: 30 })
       ]);
 
       if (statsResult.status === 'fulfilled') {
@@ -342,6 +406,14 @@ export const Dashboard = () => {
         setAccounts([]);
       }
 
+      if (collisionResult.status === 'fulfilled') {
+        setCollisionForecast(normalizeCollisionForecast(collisionResult.value));
+        setCollisionError('');
+      } else {
+        setCollisionForecast(normalizeCollisionForecast(undefined));
+        setCollisionError(t('dashboard.collision.failed'));
+      }
+
       const budgetsReady = budgetsResult.status === 'fulfilled' && Array.isArray(budgetsResult.value);
       const plansReady = plansResult.status === 'fulfilled' && Array.isArray(plansResult.value);
 
@@ -354,6 +426,8 @@ export const Dashboard = () => {
     } catch (error) {
       console.error('Failed to load dashboard data', error);
       setAdvisorError(t('dashboard.advisor.failedToLoad'));
+      setCollisionError(t('dashboard.collision.failed'));
+      setCollisionForecast(normalizeCollisionForecast(undefined));
       setFeatureHealth(buildFeatureHealth(false, false, 0, 0));
       setSuggestions([
         {
@@ -369,11 +443,11 @@ export const Dashboard = () => {
     } finally {
       setAdvisorRefreshing(false);
     }
-  };
+  }, [t, buildFeatureHealth, buildSuggestions]);
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [loadData]);
 
   useEffect(() => {
     const onChanged = () => {
@@ -381,7 +455,7 @@ export const Dashboard = () => {
     };
     window.addEventListener('finance:data-changed', onChanged);
     return () => window.removeEventListener('finance:data-changed', onChanged);
-  }, []);
+  }, [loadData]);
 
   const handleOpenAccountModal = (account?: Account) => {
     if (account) {
@@ -442,6 +516,22 @@ export const Dashboard = () => {
     info: 'border-blue-300 bg-blue-50 text-blue-700',
     positive: 'border-green-300 bg-green-50 text-green-700'
   };
+
+  const getCollisionSeverityClass = (severity: string) => {
+    if (severity === 'critical') return 'border-red-300 bg-red-50 text-red-700';
+    if (severity === 'warning') return 'border-yellow-300 bg-yellow-50 text-yellow-800';
+    return 'border-blue-300 bg-blue-50 text-blue-700';
+  };
+
+  const getCollisionEtaLabel = (daysAway: number) => {
+    if (daysAway <= 0) return t('dashboard.collision.day.today');
+    if (daysAway === 1) return t('dashboard.collision.day.tomorrow');
+    return t('dashboard.collision.day.inDays', { days: daysAway });
+  };
+
+  const nextCollision = collisionForecast.collisions[0] || null;
+  const criticalCollisionCount = collisionForecast.collisions.filter((item) => item.severity === 'critical').length;
+  const collisionPreview = collisionForecast.collisions.slice(0, 3);
 
   const summaryCards = [
     {
@@ -599,6 +689,128 @@ export const Dashboard = () => {
               );
             })}
           </AnimatePresence>
+        </div>
+      </motion.div>
+
+      <motion.div
+        className="card mb-6 relative overflow-hidden bg-gradient-to-br from-white via-amber-50/40 to-red-50/40 border-amber-200/60"
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.16 }}
+      >
+        <div className="pointer-events-none absolute -right-10 top-0 h-24 w-24 rounded-full bg-amber-200/35 blur-2xl" />
+        <div className="pointer-events-none absolute -left-8 bottom-0 h-24 w-24 rounded-full bg-red-200/30 blur-2xl" />
+
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <h3 className="text-xl font-bold flex items-center gap-2">
+              <AlertTriangle size={18} />
+              {t('dashboard.collision.title')}
+            </h3>
+            <p className="text-sm text-gray-500">{t('dashboard.collision.subtitle', { days: collisionForecast.horizonDays || 30 })}</p>
+          </div>
+          <span className="rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-xs font-bold text-amber-700">
+            {t('dashboard.collision.activeCount', { count: collisionForecast.collisions.length })}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          <div className="rounded-lg border border-slate-200 bg-white/85 px-3 py-2">
+            <div className="text-xs uppercase tracking-wide text-slate-500 font-bold">{t('dashboard.collision.metric.riskDays')}</div>
+            <div className="text-2xl font-bold text-slate-800">{collisionForecast.collisions.length}</div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white/85 px-3 py-2">
+            <div className="text-xs uppercase tracking-wide text-slate-500 font-bold">{t('dashboard.collision.metric.closestDeficit')}</div>
+            <div className="text-xl font-bold text-rose-600">
+              {nextCollision ? `$${nextCollision.deficit.toFixed(2)}` : '$0.00'}
+            </div>
+            <div className="text-xs text-slate-500">{nextCollision ? getCollisionEtaLabel(nextCollision.daysAway) : t('dashboard.collision.clear')}</div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white/85 px-3 py-2">
+            <div className="text-xs uppercase tracking-wide text-slate-500 font-bold">{t('dashboard.collision.metric.projectedEndBalance')}</div>
+            <div className={`text-xl font-bold ${collisionForecast.projectedEndBalance < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+              ${collisionForecast.projectedEndBalance.toFixed(2)}
+            </div>
+            <div className="text-xs text-slate-500">
+              {t('dashboard.collision.metric.criticalDays', { count: criticalCollisionCount })}
+            </div>
+          </div>
+        </div>
+
+        {collisionError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 mb-4 text-sm text-red-700">
+            {collisionError}
+          </div>
+        )}
+
+        {collisionPreview.length > 0 ? (
+          <div className="space-y-2 mb-4">
+            {collisionPreview.map((collision) => {
+              const topDrivers = collision.drivers
+                .slice(0, 3)
+                .map((driver) => `${driver.name || t('dashboard.collision.driver.unknown')} ($${toNumber(driver.amount).toFixed(2)})`)
+                .join(', ');
+
+              return (
+                <motion.div
+                  key={`collision-${collision.date}`}
+                  className={`rounded-lg border px-3 py-3 ${getCollisionSeverityClass(collision.severity)}`}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2 }}
+                  whileHover={{ scale: 1.005, x: 1 }}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                    <span className="font-bold">{collision.date}</span>
+                    <span className="text-xs uppercase tracking-wide font-semibold">{getCollisionEtaLabel(collision.daysAway)}</span>
+                  </div>
+                  <div className="text-sm">
+                    {t('dashboard.collision.projectedBalance')}: ${collision.projectedBalance.toFixed(2)}
+                  </div>
+                  <div className="text-sm font-semibold">
+                    {t('dashboard.collision.deficit')}: ${collision.deficit.toFixed(2)}
+                  </div>
+                  {topDrivers && (
+                    <div className="text-xs mt-1">{t('dashboard.collision.topDrivers', { drivers: topDrivers })}</div>
+                  )}
+                </motion.div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 mb-4 text-sm text-emerald-700">
+            {t('dashboard.collision.noRisk')}
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          <motion.button
+            type="button"
+            className="btn bg-white border border-gray-200 text-sm"
+            onClick={() => navigate('/alerts')}
+            whileHover={{ y: -1 }}
+            whileTap={{ scale: 0.97 }}
+          >
+            {t('dashboard.collision.action.openAlerts')}
+          </motion.button>
+          <motion.button
+            type="button"
+            className="btn bg-white border border-gray-200 text-sm"
+            onClick={() => navigate('/bills')}
+            whileHover={{ y: -1 }}
+            whileTap={{ scale: 0.97 }}
+          >
+            {t('dashboard.collision.action.openBills')}
+          </motion.button>
+          <motion.button
+            type="button"
+            className="btn bg-white border border-gray-200 text-sm"
+            onClick={() => navigate('/loans')}
+            whileHover={{ y: -1 }}
+            whileTap={{ scale: 0.97 }}
+          >
+            {t('dashboard.collision.action.openLoans')}
+          </motion.button>
         </div>
       </motion.div>
 

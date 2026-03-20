@@ -1,6 +1,378 @@
 const ACTIVE_STATES = ['active', 'acknowledged', 'snoozed'];
+const CASH_COLLISION_SOURCE_TYPE = 'cashflow';
+const CASH_COLLISION_TRIGGER_TYPE = 'cash-collision';
 
 const toMonth = (isoDate) => String(isoDate || '').slice(0, 7);
+const toIsoDate = (value) => String(value || '').slice(0, 10);
+
+const parseIsoDate = (value) => {
+  if (!value) return null;
+  const normalized = value.includes('T') ? value : `${value}T00:00:00`;
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const addDays = (date, days) => {
+  const result = new Date(date);
+  result.setDate(result.getDate() + Number(days || 0));
+  return result;
+};
+
+const toMoney = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : 0;
+};
+
+const describeFrequencyDays = (frequency) => {
+  if (frequency === 'weekly') return 7;
+  if (frequency === 'biweekly') return 14;
+  return null;
+};
+
+const incrementByFrequency = (date, frequency, fallback = 'monthly') => {
+  const effective = String(frequency || fallback || 'once').toLowerCase();
+  const next = new Date(date);
+
+  if (effective === 'none' || effective === 'once' || effective === 'one-time') {
+    return null;
+  }
+
+  const everyDays = describeFrequencyDays(effective);
+  if (everyDays) {
+    next.setDate(next.getDate() + everyDays);
+    return next;
+  }
+
+  if (effective === 'yearly' || effective === 'annual') {
+    next.setFullYear(next.getFullYear() + 1);
+    return next;
+  }
+
+  next.setMonth(next.getMonth() + 1);
+  return next;
+};
+
+const computeBalanceAsOfToday = (db, todayIso) => {
+  const initial = Number(db.prepare('SELECT COALESCE(SUM(initial_balance), 0) AS total FROM accounts').get()?.total || 0);
+
+  const ledger = db.prepare(`
+    SELECT
+      COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS income,
+      COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS expense,
+      COALESCE(SUM(CASE WHEN type = 'transfer' THEN amount ELSE 0 END), 0) AS transferOut,
+      COALESCE(SUM(CASE WHEN type = 'transfer' THEN amount ELSE 0 END), 0) AS transferIn
+    FROM transactions
+    WHERE date <= @today
+  `).get({ today: todayIso }) || {};
+
+  return toMoney(
+    initial
+    + Number(ledger.income || 0)
+    - Number(ledger.expense || 0)
+    - Number(ledger.transferOut || 0)
+    + Number(ledger.transferIn || 0)
+  );
+};
+
+const estimateBaselineDailyIncome = (db, lookbackDays = 90) => {
+  const safeWindow = Math.max(30, Math.min(365, Number(lookbackDays) || 90));
+  const result = db.prepare(`
+    SELECT COALESCE(SUM(amount), 0) AS total
+    FROM transactions
+    WHERE type = 'income'
+      AND date >= date('now', @window)
+      AND date <= date('now')
+  `).get({ window: `-${safeWindow} days` });
+
+  const total = Number(result?.total || 0);
+  if (total <= 0) return 0;
+  return toMoney(total / safeWindow);
+};
+
+const collectFutureTransactions = (db, todayIso, endIso) => {
+  const rows = db.prepare(`
+    SELECT id, merchant, amount, type, date
+    FROM transactions
+    WHERE date > @today
+      AND date <= @end
+      AND type IN ('income', 'expense')
+    ORDER BY date ASC
+  `).all({ today: todayIso, end: endIso });
+
+  const incomeEvents = [];
+  const debitEvents = [];
+
+  for (const row of rows) {
+    const amount = toMoney(row.amount);
+    if (amount <= 0) continue;
+    const event = {
+      date: toIsoDate(row.date),
+      amount,
+      sourceType: 'transaction',
+      sourceId: row.id,
+      name: row.merchant || 'Scheduled transaction'
+    };
+    if (row.type === 'income') incomeEvents.push(event);
+    else debitEvents.push(event);
+  }
+
+  return { incomeEvents, debitEvents };
+};
+
+const collectBillDebitEvents = (db, startDate, endDate) => {
+  const rows = db.prepare(`
+    SELECT id, name, amount, next_due_date, recurrence, is_paid
+    FROM bills
+  `).all();
+
+  const events = [];
+  for (const row of rows) {
+    if (Number(row.amount) <= 0) continue;
+    if (Number(row.is_paid) === 1) continue;
+    let cursor = parseIsoDate(row.next_due_date);
+    if (!cursor) continue;
+
+    const recurrence = String(row.recurrence || 'once').toLowerCase();
+    while (cursor && cursor <= endDate) {
+      if (cursor >= startDate) {
+        events.push({
+          date: toIsoDate(cursor.toISOString()),
+          amount: toMoney(row.amount),
+          sourceType: 'bill',
+          sourceId: row.id,
+          name: row.name || 'Bill'
+        });
+      }
+      const next = incrementByFrequency(cursor, recurrence, 'once');
+      if (!next || next.getTime() <= cursor.getTime()) break;
+      cursor = next;
+    }
+  }
+  return events;
+};
+
+const collectLoanDebitEvents = (db, startDate, endDate) => {
+  const rows = db.prepare(`
+    SELECT id, name, current_balance, payment_amount, payment_frequency, next_due_date
+    FROM loans
+  `).all();
+
+  const events = [];
+  for (const row of rows) {
+    if (Number(row.current_balance) <= 0 || Number(row.payment_amount) <= 0) continue;
+    let remainingBalance = Number(row.current_balance);
+    let cursor = parseIsoDate(row.next_due_date);
+    if (!cursor) continue;
+
+    const frequency = String(row.payment_frequency || 'monthly').toLowerCase();
+    while (cursor && cursor <= endDate && remainingBalance > 0) {
+      if (cursor >= startDate) {
+        const paymentAmount = toMoney(Math.min(Number(row.payment_amount), remainingBalance));
+        events.push({
+          date: toIsoDate(cursor.toISOString()),
+          amount: paymentAmount,
+          sourceType: 'loan',
+          sourceId: row.id,
+          name: row.name || 'Loan payment'
+        });
+        remainingBalance -= paymentAmount;
+      }
+      const next = incrementByFrequency(cursor, frequency, 'monthly');
+      if (!next || next.getTime() <= cursor.getTime()) break;
+      cursor = next;
+    }
+  }
+  return events;
+};
+
+const collectRecurringEvents = (db, startDate, endDate) => {
+  const rows = db.prepare(`
+    SELECT id, name, type, amount, next_due_date, frequency, status
+    FROM recurring_items
+    WHERE status = 'active'
+  `).all();
+
+  const incomeEvents = [];
+  const debitEvents = [];
+  for (const row of rows) {
+    const amount = toMoney(row.amount);
+    if (amount <= 0) continue;
+    let cursor = parseIsoDate(row.next_due_date);
+    if (!cursor) continue;
+    const frequency = String(row.frequency || 'monthly').toLowerCase();
+    while (cursor && cursor <= endDate) {
+      if (cursor >= startDate) {
+        const event = {
+          date: toIsoDate(cursor.toISOString()),
+          amount,
+          sourceType: 'recurring',
+          sourceId: row.id,
+          name: row.name || 'Recurring item'
+        };
+        if (row.type === 'income') incomeEvents.push(event);
+        else debitEvents.push(event);
+      }
+      const next = incrementByFrequency(cursor, frequency, 'monthly');
+      if (!next || next.getTime() <= cursor.getTime()) break;
+      cursor = next;
+    }
+  }
+
+  return { incomeEvents, debitEvents };
+};
+
+const getCashCollisionForecast = (db, options = {}) => {
+  const horizonDays = Math.max(7, Math.min(120, Number(options.horizonDays) || 30));
+  const lookbackDays = Math.max(30, Math.min(365, Number(options.lookbackDays) || 90));
+  const today = new Date();
+  const startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const endDate = addDays(startDate, horizonDays);
+  const todayIso = toIsoDate(startDate.toISOString());
+  const endIso = toIsoDate(endDate.toISOString());
+
+  const startBalance = computeBalanceAsOfToday(db, todayIso);
+  const baselineDailyIncome = estimateBaselineDailyIncome(db, lookbackDays);
+
+  const futureTransactions = collectFutureTransactions(db, todayIso, endIso);
+  const recurring = collectRecurringEvents(db, startDate, endDate);
+  const billDebits = collectBillDebitEvents(db, startDate, endDate);
+  const loanDebits = collectLoanDebitEvents(db, startDate, endDate);
+
+  const incomeEvents = [...futureTransactions.incomeEvents, ...recurring.incomeEvents];
+  const debitEvents = [...futureTransactions.debitEvents, ...recurring.debitEvents, ...billDebits, ...loanDebits];
+
+  const incomeByDate = new Map();
+  for (const event of incomeEvents) {
+    const list = incomeByDate.get(event.date) || [];
+    list.push(event);
+    incomeByDate.set(event.date, list);
+  }
+
+  const debitsByDate = new Map();
+  for (const event of debitEvents) {
+    const list = debitsByDate.get(event.date) || [];
+    list.push(event);
+    debitsByDate.set(event.date, list);
+  }
+
+  const collisions = [];
+  let runningBalance = startBalance;
+  let expectedIncome = 0;
+  let expectedDebits = 0;
+
+  for (let offset = 0; offset <= horizonDays; offset += 1) {
+    const current = addDays(startDate, offset);
+    const currentIso = toIsoDate(current.toISOString());
+
+    if (baselineDailyIncome > 0) {
+      runningBalance += baselineDailyIncome;
+      expectedIncome += baselineDailyIncome;
+    }
+
+    const todayIncome = incomeByDate.get(currentIso) || [];
+    for (const incomeEvent of todayIncome) {
+      runningBalance += incomeEvent.amount;
+      expectedIncome += incomeEvent.amount;
+    }
+
+    const todayDebits = debitsByDate.get(currentIso) || [];
+    for (const debitEvent of todayDebits) {
+      runningBalance -= debitEvent.amount;
+      expectedDebits += debitEvent.amount;
+    }
+
+    const projectedBalance = toMoney(runningBalance);
+    if (projectedBalance < 0) {
+      const deficit = toMoney(Math.abs(projectedBalance));
+      const severity = deficit >= 500 || offset <= 3 ? 'critical' : 'warning';
+      const topDrivers = [...todayDebits]
+        .sort((a, b) => b.amount - a.amount)
+        .slice(0, 3)
+        .map((event) => ({
+          sourceType: event.sourceType,
+          sourceId: event.sourceId,
+          name: event.name,
+          amount: toMoney(event.amount)
+        }));
+
+      collisions.push({
+        date: currentIso,
+        daysAway: offset,
+        projectedBalance,
+        deficit,
+        severity,
+        drivers: topDrivers
+      });
+    }
+  }
+
+  return {
+    asOf: todayIso,
+    horizonDays,
+    startBalance: toMoney(startBalance),
+    projectedEndBalance: toMoney(runningBalance),
+    baselineDailyIncome: toMoney(baselineDailyIncome),
+    expectedIncome: toMoney(expectedIncome),
+    expectedDebits: toMoney(expectedDebits),
+    collisions
+  };
+};
+
+const buildCollisionMessage = (collision) => {
+  const prefix = collision.daysAway <= 0 ? 'Cash collision expected today' : `Cash collision expected in ${collision.daysAway} day(s)`;
+  return `${prefix}: projected balance ${collision.projectedBalance.toFixed(2)} on ${collision.date}.`;
+};
+
+const buildCollisionCondition = (collision) => {
+  const driverSummary = collision.drivers.length > 0
+    ? collision.drivers.map((driver) => `${driver.name} (${driver.amount.toFixed(2)})`).join(', ')
+    : 'No single debit driver.';
+  return `Projected deficit ${collision.deficit.toFixed(2)} on ${collision.date}. Drivers: ${driverSummary}`;
+};
+
+const evaluateCashCollisionAlerts = (db, options = {}) => {
+  const forecast = getCashCollisionForecast(db, options);
+  const activeSourceIds = new Set();
+
+  for (const collision of forecast.collisions) {
+    const sourceId = collision.date;
+    activeSourceIds.add(sourceId);
+    const alertId = `${CASH_COLLISION_SOURCE_TYPE}_${sourceId}_${CASH_COLLISION_TRIGGER_TYPE}`;
+    const existing = db.prepare('SELECT status FROM alerts WHERE id = ?').get(alertId);
+    const preservedStatus = ACTIVE_STATES.includes(existing?.status) ? existing.status : 'active';
+
+    createAlert(db, {
+      id: alertId,
+      sourceType: CASH_COLLISION_SOURCE_TYPE,
+      sourceId,
+      triggerType: CASH_COLLISION_TRIGGER_TYPE,
+      conditionText: buildCollisionCondition(collision),
+      severity: collision.severity,
+      message: buildCollisionMessage(collision),
+      recommendedAction: 'Shift payment dates, pre-fund required bills, or reduce optional spending before this date.',
+      status: preservedStatus
+    });
+  }
+
+  const placeholders = [...activeSourceIds].map(() => '?').join(', ');
+  const statusPlaceholders = ACTIVE_STATES.map(() => '?').join(', ');
+  const params = [CASH_COLLISION_SOURCE_TYPE, CASH_COLLISION_TRIGGER_TYPE, ...ACTIVE_STATES];
+
+  let query = `
+    UPDATE alerts
+    SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    WHERE source_type = ?
+      AND trigger_type = ?
+      AND status IN (${statusPlaceholders})
+  `;
+  if (activeSourceIds.size > 0) {
+    query += ` AND source_id NOT IN (${placeholders})`;
+    params.push(...activeSourceIds);
+  }
+  db.prepare(query).run(...params);
+
+  return forecast;
+};
 
 const upsertAlert = (db, alertInput) => {
   const alert = {
@@ -260,8 +632,10 @@ const summarizeAlertCounts = (db) => {
 export {
   createScenarioRiskAlert,
   evaluateAlertsForTransaction,
+  evaluateCashCollisionAlerts,
   getActiveAlertCountForMonth,
   getAlerts,
+  getCashCollisionForecast,
   summarizeAlertCounts,
   updateAlertStatus
 };

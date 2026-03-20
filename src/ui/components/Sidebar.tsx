@@ -6,6 +6,7 @@ import {
   PiggyBank,
   Target,
   CalendarDays,
+  LineChart,
   Settings,
   CreditCard,
   FileUp,
@@ -36,6 +37,7 @@ const MAIN_LINKS: SidebarNavItem[] = [
   { to: '/bills', labelKey: 'sidebar.bills', icon: CalendarDays },
   { to: '/loans', labelKey: 'sidebar.loans', icon: CreditCard },
   { to: '/plans', labelKey: 'sidebar.plans', icon: ClipboardList },
+  { to: '/scenarios', labelKey: 'sidebar.scenarios', icon: LineChart },
   { to: '/import-export', labelKey: 'sidebar.importExport', icon: FileUp }
 ];
 
@@ -45,17 +47,13 @@ export const Sidebar = () => {
   const { t, dir } = useI18n();
   const [collapsed, setCollapsed] = useState<boolean>(() => localStorage.getItem('sidebarCollapsed') === '1');
   const [isMobile, setIsMobile] = useState<boolean>(() => window.innerWidth <= MOBILE_BREAKPOINT);
-  const [mobileOpen, setMobileOpen] = useState<boolean>(() => window.innerWidth > MOBILE_BREAKPOINT);
+  const [mobileOpen, setMobileOpen] = useState<boolean>(false);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-  useEffect(() => {
-    setMobileOpen(!isMobile);
-  }, [isMobile]);
 
   useEffect(() => {
     localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0');

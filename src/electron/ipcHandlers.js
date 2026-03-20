@@ -80,6 +80,9 @@ export function registerIpcHandlers(ipcMainInstance) {
 
   // Loans
   on('db-get-loans', () => dbService.getLoans());
+  on('db-get-loan-payments', (filter) => dbService.getLoanPayments(filter || {}));
+  on('db-get-loan-payment-stats', () => dbService.getLoanPaymentStats());
+  on('db-pay-loan', (payload) => dbService.payLoan(payload || {}));
   on('db-save-loan', (loan) => dbService.saveLoan(loan));
   on('db-delete-loan', (id) => dbService.deleteLoan(id));
 
@@ -93,6 +96,7 @@ export function registerIpcHandlers(ipcMainInstance) {
   on('db-set-alert-status', (id, status, options, context) => dbService.setAlertStatus(id, status, options || {}, context || {}));
   on('db-get-alert-summary', (context) => dbService.getAlertSummary(context || {}));
   on('db-get-alert-events', (filter, context) => dbService.getAlertEvents(filter || {}, context || {}));
+  on('db-get-cash-collision-forecast', (options, context) => dbService.getCashCollisionForecast(options || {}, context || {}));
   on('db-get-system-state', (month, context) => dbService.getSystemState(month, context || {}));
 
   // Settlement / Reports
@@ -132,6 +136,13 @@ export function registerIpcHandlers(ipcMainInstance) {
   on('db-get-tax-rules', () => dbService.getTaxRules());
   on('db-get-app-settings', () => dbService.getAppSettings());
   on('db-set-app-setting', (key, value) => dbService.setAppSetting(key, value));
+  on('db-get-metadata', (filter) => dbService.getMetadata(filter || {}));
+  on('db-set-metadata', (payload) => dbService.setMetadata(payload || {}));
+  on('db-delete-metadata', (payload) => dbService.deleteMetadata(payload || {}));
+  on('db-get-realtime-state', (filter) => dbService.getRealtimeState(filter || {}));
+  on('db-set-realtime-state', (payload) => dbService.setRealtimeState(payload || {}));
+  on('db-refresh-realtime-state', () => dbService.refreshRealtimeState());
+  on('db-optimize-database', (options) => dbService.optimizeDatabase(options || {}));
 
   // Schema version / upgrade
   on('db-get-schema-status', () => dbService.getSchemaStatus());

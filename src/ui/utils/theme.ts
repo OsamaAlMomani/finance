@@ -1,8 +1,12 @@
 export type ThemeKey = 'dark';
 
-export const resolveTheme = (_rawTheme: string | null): ThemeKey => 'dark';
+export const resolveTheme = (rawTheme: string | null): ThemeKey => {
+  const normalizedTheme = String(rawTheme || '').trim().toLowerCase();
+  return normalizedTheme === 'dark' ? 'dark' : 'dark';
+};
 
-export const applyTheme = (_themeInput: ThemeKey | string | null) => {
+export const applyTheme = (themeInput: ThemeKey | string | null) => {
+  const _resolved = resolveTheme(themeInput);
   const classList = document.body.classList;
   classList.remove(
     'default-theme',
@@ -16,5 +20,5 @@ export const applyTheme = (_themeInput: ThemeKey | string | null) => {
     'nature-theme',
     'royal-theme'
   );
-  classList.add('dark-theme');
+  classList.add(`${_resolved}-theme`);
 };

@@ -11,6 +11,7 @@
 
 html {
   font-size: clamp(14px, 0.1vw + 13px, 16px);
+  overflow-x: clip;
 }
 
 :root {
@@ -23,7 +24,7 @@ body {
   background: var(--sketch-bg);
   color: var(--ink-black);
   min-height: 100dvh;
-  overflow-x: hidden;
+  overflow-x: clip;
   transition: background-color 0.5s, color 0.3s, border-color 0.3s;
 }
 
@@ -833,6 +834,7 @@ body.dark-theme {
   padding: clamp(1rem, 2vw, 2rem);
   overflow-y: auto;
   background: var(--sketch-bg);
+  position: relative;
 }
 
 .titlebar {
@@ -1175,6 +1177,7 @@ body.dark-theme {
 @layer components {
   .route-workspace {
     @apply flex min-h-0 flex-1 flex-col;
+    min-width: 0;
   }
 
   .btn-sm {
@@ -1337,11 +1340,16 @@ body.dark-theme {
   }
 
   .system-state-fab {
-    @apply fixed bottom-4 right-4 z-40 inline-flex h-12 w-12 items-center justify-center rounded-full border-2 transition-transform duration-200;
+    @apply absolute bottom-4 right-4 z-40 inline-flex h-12 w-12 items-center justify-center rounded-full border-2 transition-transform duration-200;
+    z-index: 70;
+    bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    right: calc(1rem + env(safe-area-inset-right, 0px));
     border-color: var(--border-color);
     background: var(--paper-white);
     color: var(--ink-black);
     box-shadow: var(--card-shadow);
+    pointer-events: auto;
+    touch-action: manipulation;
   }
 
   .system-state-fab:hover {
@@ -1689,7 +1697,30 @@ body.dark-theme {
   }
 
   .main-content {
+    display: block;
     padding: 1.5rem;
+    overflow-x: clip;
+  }
+
+  .route-workspace {
+    display: block;
+    min-height: auto;
+    flex: 0 0 auto;
+  }
+
+  .route-workspace > [class*='h-full'] {
+    height: auto !important;
+    min-height: 0;
+  }
+
+  .route-workspace > [class*='overflow-hidden'] {
+    overflow: visible !important;
+  }
+
+  .system-state-bar {
+    max-height: min(70vh, 34rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .titlebar-help-menu {

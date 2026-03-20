@@ -1,82 +1,50 @@
-# React + TypeScript + Vite
+# Finance Desktop App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Desktop-first personal finance app built with React, Vite, Electron, and SQLite.
 
-## Project Documentation Layout
+## Stack
 
-Non-runtime documentation is organized under `docs/`:
+- UI: React + TypeScript + Tailwind CSS
+- Desktop shell: Electron
+- Data layer: `better-sqlite3`
+- Unit/integration testing: Vitest
+- UI automation/regression: Playwright (desktop Chromium baseline)
 
-- `docs/specs` for implementation specs, roadmap, and UX flow documents
-- `docs/analysis` for architecture notes and analysis artifacts
-- `docs/assets` for reference PDFs and binary attachments
-- `docs/logs` for session/chat logs
+## Quick Start
 
-Currently, two official plugins are available:
+1. Install dependencies:
+   - `npm install`
+2. Rebuild native SQLite module for local Node runtime:
+   - `npm run rebuild:node`
+3. Run app:
+   - Web UI only: `npm run dev:react`
+   - Full desktop app (React + Electron): `npm run dev`
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Build
 
-## React Compiler
+- Production web bundle: `npm run build`
+- Desktop package (dir): `npm run pack`
+- Desktop installers: `npm run dist`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Testing
 
-## Expanding the ESLint configuration
+- Unit tests: `npm run test:unit`
+- Integration tests: `npm run test:integration`
+- Desktop UI regression matrix (100+ checks): `npm run test:e2e:regression-matrix`
+- Desktop UI visual/style regression: `npm run test:e2e:regression-ui`
+- Functional button sweep: `npm run test:e2e:functional-buttons`
+- Full desktop UI pipeline: `npm run test:e2e:desktop`
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Quality
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- Lint: `npm run lint`
+- Coverage: `npm run test:coverage`
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Project Docs
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- Roadmap/TODO: `docs/specs/TODO.md`
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Notes
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- E2E suite is configured for desktop validation first.
+- Playwright starts the Vite dev server automatically from config.

@@ -17,8 +17,11 @@ import {
   upsertTag
 } from './v2/classificationService.js';
 import {
+  createScenarioRiskAlert,
   evaluateAlertsForTransaction,
+  evaluateCashCollisionAlerts,
   getAlerts,
+  getCashCollisionForecast as buildCashCollisionForecast,
   summarizeAlertCounts,
   updateAlertStatus
 } from './v2/alertsService.js';
@@ -38,13 +41,6 @@ import {
   markSettlementDirty,
   reopenSettlement
 } from './v2/settlementService.js';
-import {
-  deleteScenario,
-  getScenarioById,
-  getScenarios,
-  runScenario,
-  saveScenario
-} from './v2/scenariosService.js';
 import {
   checkPermission,
   deletePermission,
@@ -103,12 +99,18 @@ export function initDatabase(dbPath) {
     : undefined;
   db = new Database(dbPath, verbose ? { verbose } : {});
   db.pragma('journal_mode = WAL');
+  db.pragma('synchronous = NORMAL');
   db.pragma('foreign_keys = ON');
+  db.pragma('busy_timeout = 5000');
+  db.pragma('temp_store = MEMORY');
+  db.pragma('cache_size = -20000');
+  db.pragma('wal_autocheckpoint = 1000');
 
   createTables();
   seedInitialData();
   ensureDefaultOwnerPermission(db);
   initializeSchemaVersioning();
+  refreshRealtimeState();
 
   return db;
 }
@@ -220,6 +222,25 @@ function createTables() {
       value TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS entity_metadata (
+      scope_type TEXT NOT NULL,
+      scope_id TEXT NOT NULL,
+      metadata_key TEXT NOT NULL,
+      value_json TEXT NOT NULL,
+      tags_json TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (scope_type, scope_id, metadata_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS realtime_state (
+      state_key TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      version INTEGER DEFAULT 1,
+      updated_at TEXT NOT NULL,
+      expires_at TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS loans (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -233,6 +254,18 @@ function createTables() {
       lender TEXT NOT NULL,
       notes TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS loan_payments (
+      id TEXT PRIMARY KEY,
+      loan_id TEXT NOT NULL,
+      amount REAL NOT NULL,
+      balance_before REAL NOT NULL,
+      balance_after REAL NOT NULL,
+      paid_at TEXT NOT NULL,
+      note TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(loan_id) REFERENCES loans(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS plans (
@@ -531,15 +564,30 @@ function createTables() {
     CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
     CREATE INDEX IF NOT EXISTS idx_transactions_category_month ON transactions(category_id, date);
     CREATE INDEX IF NOT EXISTS idx_transactions_settlement_month ON transactions(settlement_month);
+    CREATE INDEX IF NOT EXISTS idx_transactions_account_date ON transactions(account_id, date DESC);
+    CREATE INDEX IF NOT EXISTS idx_transactions_to_account_date ON transactions(to_account_id, date DESC);
+    CREATE INDEX IF NOT EXISTS idx_transactions_type_date ON transactions(type, date DESC);
+    CREATE INDEX IF NOT EXISTS idx_transactions_category_type_date ON transactions(category_id, type, date DESC);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_dedupe_hash ON transactions(dedupe_hash) WHERE dedupe_hash IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_budgets_category_period ON budgets(category_id, period);
+    CREATE INDEX IF NOT EXISTS idx_goals_target_date ON goals(target_date);
+    CREATE INDEX IF NOT EXISTS idx_bills_paid_due ON bills(is_paid, next_due_date);
+    CREATE INDEX IF NOT EXISTS idx_loans_due_status_next_due ON loans(due_status, next_due_date);
+    CREATE INDEX IF NOT EXISTS idx_goal_contributions_goal_date ON goal_contributions(goal_id, date DESC);
+    CREATE INDEX IF NOT EXISTS idx_recurring_status_due ON recurring_items(status, next_due_date);
     CREATE INDEX IF NOT EXISTS idx_classification_rules_priority ON classification_rules(priority);
     CREATE INDEX IF NOT EXISTS idx_alerts_status_severity ON alerts(status, severity);
     CREATE INDEX IF NOT EXISTS idx_alerts_source ON alerts(source_type, source_id);
+    CREATE INDEX IF NOT EXISTS idx_alerts_status_updated ON alerts(status, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_permissions_scope_subject ON permissions(scope_type, scope_id, subject_type, subject_id);
     CREATE INDEX IF NOT EXISTS idx_share_snapshots_status ON share_snapshots(status);
     CREATE INDEX IF NOT EXISTS idx_alert_events_alert_id ON alert_events(alert_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_settlement_events_month ON settlement_events(month, created_at);
     CREATE INDEX IF NOT EXISTS idx_report_exports_month ON report_exports(month, created_at);
+    CREATE INDEX IF NOT EXISTS idx_loan_payments_loan_paid_at ON loan_payments(loan_id, paid_at DESC, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_entity_metadata_scope ON entity_metadata(scope_type, scope_id, metadata_key);
+    CREATE INDEX IF NOT EXISTS idx_entity_metadata_updated ON entity_metadata(updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_realtime_state_updated ON realtime_state(updated_at DESC);
   `);
 }
 
@@ -612,6 +660,282 @@ const sanitizeNumber = (value, fallback = 0) => {
 };
 
 const createAuditId = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+const parseJsonSafely = (value, fallback) => {
+  if (value === null || value === undefined || value === '') return fallback;
+  try {
+    return JSON.parse(value);
+  } catch (_error) {
+    return fallback;
+  }
+};
+
+const normalizeRealtimeStateRow = (row) => {
+  if (!row) return null;
+  return {
+    ...row,
+    payload: parseJsonSafely(row.payload_json, {})
+  };
+};
+
+const normalizeMetadataRow = (row) => {
+  if (!row) return null;
+  return {
+    ...row,
+    value: parseJsonSafely(row.value_json, null),
+    tags: parseJsonSafely(row.tags_json, [])
+  };
+};
+
+const setRealtimeStateInternal = (stateKey, payload, options = {}) => {
+  if (!db) return null;
+  const normalizedKey = String(stateKey || '').trim();
+  if (!normalizedKey) {
+    throw new Error('stateKey is required.');
+  }
+  const updatedAtInput = String(options.updatedAt || options.updated_at || new Date().toISOString());
+  const updatedAtDate = new Date(updatedAtInput);
+  const updatedAt = Number.isNaN(updatedAtDate.getTime()) ? new Date().toISOString() : updatedAtDate.toISOString();
+  const ttlSeconds = Math.max(0, Math.floor(sanitizeNumber(options.ttlSeconds ?? options.ttl_seconds, 0)));
+  const expiresAt = ttlSeconds > 0
+    ? new Date(new Date(updatedAt).getTime() + ttlSeconds * 1000).toISOString()
+    : null;
+  const payloadJson = JSON.stringify(payload ?? {});
+
+  db.prepare(`
+    INSERT INTO realtime_state (state_key, payload_json, version, updated_at, expires_at)
+    VALUES (@stateKey, @payloadJson, 1, @updatedAt, @expiresAt)
+    ON CONFLICT(state_key) DO UPDATE SET
+      payload_json = excluded.payload_json,
+      version = realtime_state.version + 1,
+      updated_at = excluded.updated_at,
+      expires_at = excluded.expires_at
+  `).run({
+    stateKey: normalizedKey,
+    payloadJson,
+    updatedAt,
+    expiresAt
+  });
+
+  return normalizeRealtimeStateRow(
+    db.prepare('SELECT * FROM realtime_state WHERE state_key = ?').get(normalizedKey)
+  );
+};
+
+const buildRealtimeSummaryPayload = () => {
+  const row = db.prepare(`
+    SELECT
+      COALESCE((SELECT SUM(initial_balance) FROM accounts), 0) AS accounts_initial_balance,
+      COALESCE((SELECT SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) FROM transactions), 0) AS total_income,
+      COALESCE((SELECT SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) FROM transactions), 0) AS total_expense,
+      COALESCE((SELECT COUNT(*) FROM transactions), 0) AS transaction_count,
+      COALESCE((SELECT MAX(date) FROM transactions), NULL) AS last_transaction_date,
+      COALESCE((SELECT COUNT(*) FROM alerts WHERE status IN ('active', 'acknowledged', 'snoozed')), 0) AS active_alerts,
+      COALESCE((SELECT COUNT(*) FROM loans), 0) AS loan_count,
+      COALESCE((SELECT SUM(current_balance) FROM loans), 0) AS total_loan_balance,
+      COALESCE((SELECT COUNT(*) FROM loan_payments), 0) AS loan_payment_count,
+      COALESCE((SELECT COUNT(*) FROM bills WHERE is_paid = 0), 0) AS unpaid_bills,
+      COALESCE((SELECT COUNT(*) FROM goals), 0) AS goal_count,
+      COALESCE((SELECT COUNT(*) FROM recurring_items WHERE status = 'active'), 0) AS active_recurring_count
+  `).get();
+
+  const totalBalance = sanitizeNumber(row.accounts_initial_balance) + sanitizeNumber(row.total_income) - sanitizeNumber(row.total_expense);
+  return {
+    totalBalance,
+    totalIncome: sanitizeNumber(row.total_income),
+    totalExpense: sanitizeNumber(row.total_expense),
+    transactionCount: sanitizeNumber(row.transaction_count),
+    lastTransactionDate: row.last_transaction_date || null,
+    activeAlerts: sanitizeNumber(row.active_alerts),
+    loanCount: sanitizeNumber(row.loan_count),
+    totalLoanBalance: sanitizeNumber(row.total_loan_balance),
+    loanPaymentCount: sanitizeNumber(row.loan_payment_count),
+    unpaidBills: sanitizeNumber(row.unpaid_bills),
+    goalCount: sanitizeNumber(row.goal_count),
+    activeRecurringCount: sanitizeNumber(row.active_recurring_count),
+    generatedAt: new Date().toISOString()
+  };
+};
+
+const getScenarioMonthlyAverages = (database, monthCount = 3) => {
+  const rows = database.prepare(`
+    SELECT substr(date, 1, 7) AS month,
+           SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) AS income,
+           SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) AS expense
+    FROM transactions
+    GROUP BY substr(date, 1, 7)
+    ORDER BY month DESC
+    LIMIT ?
+  `).all(monthCount);
+
+  if (rows.length === 0) {
+    return { monthlyIncome: 0, monthlyExpense: 0 };
+  }
+
+  const monthlyIncome = rows.reduce((sum, row) => sum + sanitizeNumber(row.income, 0), 0) / rows.length;
+  const monthlyExpense = rows.reduce((sum, row) => sum + sanitizeNumber(row.expense, 0), 0) / rows.length;
+
+  return { monthlyIncome, monthlyExpense };
+};
+
+const runScenarioProjection = (database, assumptions = {}) => {
+  const base = getScenarioMonthlyAverages(database);
+  const months = Math.max(1, Math.round(sanitizeNumber(assumptions.duration_months || assumptions.months, 6)));
+  const monthlyIncome = sanitizeNumber(assumptions.monthly_income ?? base.monthlyIncome, 0);
+  const monthlyExpense = sanitizeNumber(assumptions.monthly_expense ?? base.monthlyExpense, 0);
+  const extraMonthlyExpense = sanitizeNumber(assumptions.extra_monthly_expense, 0);
+  const oneOffExpense = sanitizeNumber(assumptions.one_off_expense, 0);
+  const incomeDelta = sanitizeNumber(assumptions.income_delta, 0);
+  const expenseDelta = sanitizeNumber(assumptions.expense_delta, 0);
+
+  const accountTotals = sanitizeNumber(
+    database.prepare('SELECT COALESCE(SUM(initial_balance), 0) AS total FROM accounts').get()?.total,
+    0
+  );
+  const historicalNet = sanitizeNumber(database.prepare(`
+    SELECT COALESCE(SUM(
+      CASE
+        WHEN type = 'income' THEN amount
+        WHEN type = 'expense' THEN -amount
+        ELSE 0
+      END
+    ), 0) AS total
+    FROM transactions
+  `).get()?.total, 0);
+
+  let runningBalance = sanitizeNumber(assumptions.start_balance, accountTotals + historicalNet);
+  const timeline = [];
+
+  for (let i = 0; i < months; i += 1) {
+    const monthIncome = monthlyIncome + incomeDelta * i;
+    const monthExpense = monthlyExpense + expenseDelta * i + extraMonthlyExpense;
+    const oneOff = i === 0 ? oneOffExpense : 0;
+    const net = monthIncome - monthExpense - oneOff;
+
+    runningBalance += net;
+
+    const date = new Date();
+    date.setMonth(date.getMonth() + i);
+
+    timeline.push({
+      month: date.toISOString().slice(0, 7),
+      income: Number(monthIncome.toFixed(2)),
+      expense: Number((monthExpense + oneOff).toFixed(2)),
+      net: Number(net.toFixed(2)),
+      projectedBalance: Number(runningBalance.toFixed(2))
+    });
+  }
+
+  const finalBalance = timeline.length > 0
+    ? timeline[timeline.length - 1].projectedBalance
+    : Number(runningBalance.toFixed(2));
+  const lowestBalance = timeline.reduce((min, item) => Math.min(min, item.projectedBalance), finalBalance);
+
+  let riskLevel = 'low';
+  const riskNotes = [];
+
+  if (lowestBalance < 0 || finalBalance < 0) {
+    riskLevel = 'high';
+    riskNotes.push('Projection enters negative balance.');
+  } else if (finalBalance < sanitizeNumber(assumptions.start_balance, accountTotals + historicalNet) * 0.75) {
+    riskLevel = 'medium';
+    riskNotes.push('Projection shows significant runway reduction.');
+  } else {
+    riskNotes.push('Projection remains within healthy runway.');
+  }
+
+  return {
+    assumptions: {
+      months,
+      monthly_income: monthlyIncome,
+      monthly_expense: monthlyExpense,
+      extra_monthly_expense: extraMonthlyExpense,
+      income_delta: incomeDelta,
+      expense_delta: expenseDelta,
+      one_off_expense: oneOffExpense,
+      start_balance: Number(sanitizeNumber(assumptions.start_balance, accountTotals + historicalNet).toFixed(2))
+    },
+    timeline,
+    summary: {
+      finalBalance,
+      lowestBalance,
+      riskLevel,
+      riskNotes
+    }
+  };
+};
+
+const getScenarioById = (database, id) => {
+  const row = database.prepare('SELECT * FROM scenarios WHERE id = ?').get(id);
+  if (!row) return null;
+  return {
+    ...row,
+    assumptions: parseJsonSafely(row.assumptions_json, {}),
+    result_snapshot: parseJsonSafely(row.result_snapshot_json, null)
+  };
+};
+
+const getScenarios = (database) => {
+  return database.prepare('SELECT * FROM scenarios ORDER BY updated_at DESC, created_at DESC').all().map((row) => ({
+    ...row,
+    assumptions: parseJsonSafely(row.assumptions_json, {}),
+    result_snapshot: parseJsonSafely(row.result_snapshot_json, null)
+  }));
+};
+
+const runScenario = (database, input = {}) => {
+  const assumptions = input.assumptions || input;
+  return runScenarioProjection(database, assumptions);
+};
+
+const saveScenario = (database, scenario) => {
+  const assumptions = typeof scenario.assumptions_json === 'string'
+    ? parseJsonSafely(scenario.assumptions_json, {})
+    : (scenario.assumptions || {});
+
+  const result = scenario.result_snapshot_json
+    ? (typeof scenario.result_snapshot_json === 'string'
+      ? parseJsonSafely(scenario.result_snapshot_json, null)
+      : scenario.result_snapshot_json)
+    : runScenarioProjection(database, assumptions);
+
+  const riskLevel = result?.summary?.riskLevel || scenario.risk_level || 'low';
+
+  database.prepare(`
+    INSERT INTO scenarios (id, title, assumptions_json, duration_months, result_snapshot_json, risk_level)
+    VALUES (@id, @title, @assumptionsJson, @durationMonths, @resultSnapshotJson, @riskLevel)
+    ON CONFLICT(id) DO UPDATE SET
+      title = @title,
+      assumptions_json = @assumptionsJson,
+      duration_months = @durationMonths,
+      result_snapshot_json = @resultSnapshotJson,
+      risk_level = @riskLevel,
+      updated_at = CURRENT_TIMESTAMP
+  `).run({
+    id: scenario.id,
+    title: scenario.title,
+    assumptionsJson: JSON.stringify(assumptions),
+    durationMonths: Math.max(1, Math.round(sanitizeNumber(
+      assumptions.duration_months || assumptions.months || scenario.duration_months,
+      6
+    ))),
+    resultSnapshotJson: JSON.stringify(result || {}),
+    riskLevel
+  });
+
+  createScenarioRiskAlert(
+    database,
+    scenario.id,
+    riskLevel,
+    `Scenario "${scenario.title}" risk level is ${riskLevel}.`
+  );
+
+  return getScenarioById(database, scenario.id);
+};
+
+const deleteScenario = (database, id) => {
+  database.prepare('DELETE FROM scenarios WHERE id = ?').run(id);
+};
 
 const computeTransactionDedupeHash = (tx) => {
   const parts = [
@@ -718,11 +1042,13 @@ const runTransactionRipplePipeline = (transactionId, normalizedTx) => {
     category_id: normalizedTx.categoryId,
     date: normalizedTx.date
   });
+  evaluateCashCollisionAlerts(db);
 
   const month = getMonthFromDate(normalizedTx.date);
   if (month) {
     markSettlementDirty(db, month, `Transaction ${transactionId} changed.`);
   }
+  refreshRealtimeState();
 };
 
 // -- Accounts --
@@ -780,6 +1106,8 @@ export function createAccount(account) {
     currency: account.currency || 'USD',
     initialBalance: account.initialBalance || 0
   });
+  evaluateCashCollisionAlerts(db);
+  refreshRealtimeState();
   return account;
 }
 
@@ -795,14 +1123,34 @@ export function updateAccount(account) {
     currency: account.currency,
     initialBalance: account.initialBalance
   });
+  evaluateCashCollisionAlerts(db);
+  refreshRealtimeState();
   return account;
 }
 
 export function deleteAccount(id) {
-  db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
-  // Also delete related transactions? Or cascade?
-  // For now simple delete.
-  db.prepare('DELETE FROM transactions WHERE account_id = ?').run(id);
+  const tx = db.transaction(() => {
+    const relatedTransactions = db.prepare(`
+      SELECT id
+      FROM transactions
+      WHERE account_id = ? OR to_account_id = ?
+    `).all(id, id);
+
+    if (relatedTransactions.length > 0) {
+      const deleteGoalContribution = db.prepare('DELETE FROM goal_contributions WHERE transaction_id = ?');
+      for (const row of relatedTransactions) {
+        deleteGoalContribution.run(row.id);
+      }
+      db.prepare('DELETE FROM transactions WHERE account_id = ? OR to_account_id = ?').run(id, id);
+    }
+
+    db.prepare('DELETE FROM recurring_items WHERE account_id = ?').run(id);
+    db.prepare('UPDATE goals SET linked_account_id = NULL WHERE linked_account_id = ?').run(id);
+    db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
+  });
+  tx();
+  evaluateCashCollisionAlerts(db);
+  refreshRealtimeState();
 }
 
 // -- Transactions --
@@ -929,12 +1277,12 @@ export function deleteTransaction(id) {
     assertTransactionEditable(db, id);
     const existing = db.prepare('SELECT date FROM transactions WHERE id = ?').get(id);
     removeGoalContributionByTransaction(id);
-    db.prepare('DELETE FROM transaction_tags WHERE transaction_id = ?').run(id);
-    db.prepare('DELETE FROM transaction_labels WHERE transaction_id = ?').run(id);
     db.prepare('DELETE FROM transactions WHERE id = ?').run(id);
+    evaluateCashCollisionAlerts(db);
     if (existing?.date) {
       markSettlementDirty(db, getMonthFromDate(existing.date), `Transaction ${id} deleted.`);
     }
+    refreshRealtimeState();
 }
 
 // -- Categories --
@@ -954,6 +1302,7 @@ export function createCategory(cat) {
         color: cat.color,
         icon: cat.icon
     });
+    refreshRealtimeState();
     return cat;
 }
 
@@ -984,15 +1333,19 @@ export function deleteCategory(id, reassignmentCategoryId = null) {
     }
 
     db.prepare('DELETE FROM categories WHERE id = ?').run(id);
+    refreshRealtimeState();
 }
 
 // -- Dashboard Stats --
 export function getDashboardStats() {
-    // Better: sum of account initial_balance + sum of transactions
-    const initialBalStart = db.prepare('SELECT SUM(initial_balance) as t FROM accounts').get().t || 0;
-    
-    const income = db.prepare("SELECT SUM(amount) as t FROM transactions WHERE type = 'income'").get().t || 0;
-    const expense = db.prepare("SELECT SUM(amount) as t FROM transactions WHERE type = 'expense'").get().t || 0;
+    evaluateCashCollisionAlerts(db);
+    refreshRealtimeState();
+    const realtimeSummary = getRealtimeState({ stateKey: 'system.summary' });
+    const summary = realtimeSummary?.payload || buildRealtimeSummaryPayload();
+    const income = sanitizeNumber(summary.totalIncome, 0);
+    const expense = sanitizeNumber(summary.totalExpense, 0);
+    const totalBalance = sanitizeNumber(summary.totalBalance, 0);
+    const activeAlerts = sanitizeNumber(summary.activeAlerts, 0);
     
     // Recent activity (Last 30 days chart data)
     // Group by date
@@ -1006,12 +1359,8 @@ export function getDashboardStats() {
         ORDER BY date ASC
     `).all();
 
-    const activeAlerts = db.prepare(`
-      SELECT COUNT(*) as t FROM alerts WHERE status IN ('active', 'acknowledged', 'snoozed')
-    `).get().t || 0;
-
     return {
-        totalBalance: initialBalStart + income - expense,
+        totalBalance,
         totalIncome: income,
         totalExpense: expense,
         chartData,
@@ -1075,12 +1424,14 @@ export function saveBudget(budget) {
     limitAmount: budget.limit_amount
   });
   markSettlementDirty(db, new Date().toISOString().slice(0, 7), `Budget ${budget.id} updated.`);
+  refreshRealtimeState();
   return budget;
 }
 
 export function deleteBudget(id) {
     db.prepare('DELETE FROM budgets WHERE id = ?').run(id);
     markSettlementDirty(db, new Date().toISOString().slice(0, 7), `Budget ${id} deleted.`);
+    refreshRealtimeState();
 }
 
 // -- Goals --
@@ -1118,12 +1469,18 @@ export function saveGoal(goal) {
     protectedPool: goal.protected_pool ? 1 : 0
   });
   markSettlementDirty(db, new Date().toISOString().slice(0, 7), `Goal ${goal.id} updated.`);
+  refreshRealtimeState();
   return goal;
 }
 
 export function deleteGoal(id) {
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM goal_contributions WHERE goal_id = ?').run(id);
     db.prepare('DELETE FROM goals WHERE id = ?').run(id);
-    markSettlementDirty(db, new Date().toISOString().slice(0, 7), `Goal ${id} deleted.`);
+  });
+  tx();
+  markSettlementDirty(db, new Date().toISOString().slice(0, 7), `Goal ${id} deleted.`);
+  refreshRealtimeState();
 }
 
 export function getGoalContributions() {
@@ -1162,16 +1519,136 @@ export function saveBill(bill) {
     isPaid: bill.is_paid ? 1 : 0,
     autoPay: bill.auto_pay ? 1 : 0
   });
+  evaluateCashCollisionAlerts(db);
+  refreshRealtimeState();
   return bill;
 }
 
 export function deleteBill(id) {
     db.prepare('DELETE FROM bills WHERE id = ?').run(id);
+    evaluateCashCollisionAlerts(db);
+    refreshRealtimeState();
 }
 
 // -- Loans --
 export function getLoans() {
   return db.prepare('SELECT * FROM loans ORDER BY interest_rate DESC').all();
+}
+
+export function getLoanPayments(filter = {}) {
+  const conditions = [];
+  const params = [];
+  let query = 'SELECT * FROM loan_payments';
+
+  if (filter.loanId || filter.loan_id) {
+    conditions.push('loan_id = ?');
+    params.push(filter.loanId || filter.loan_id);
+  }
+
+  if (filter.fromDate || filter.from_date) {
+    conditions.push('paid_at >= ?');
+    params.push(filter.fromDate || filter.from_date);
+  }
+
+  if (filter.toDate || filter.to_date) {
+    conditions.push('paid_at <= ?');
+    params.push(filter.toDate || filter.to_date);
+  }
+
+  if (conditions.length > 0) {
+    query += ` WHERE ${conditions.join(' AND ')}`;
+  }
+
+  query += ' ORDER BY paid_at DESC, created_at DESC';
+  const limit = Math.max(1, Math.min(1000, Number(filter.limit) || 100));
+  query += ` LIMIT ${limit}`;
+
+  return db.prepare(query).all(...params);
+}
+
+export function getLoanPaymentStats() {
+  return db.prepare(`
+    SELECT
+      lp.loan_id,
+      COUNT(*) AS payment_count,
+      COALESCE(SUM(lp.amount), 0) AS total_paid,
+      MAX(lp.paid_at) AS last_paid_at,
+      COALESCE((
+        SELECT lp2.amount
+        FROM loan_payments lp2
+        WHERE lp2.loan_id = lp.loan_id
+        ORDER BY lp2.paid_at DESC, lp2.created_at DESC
+        LIMIT 1
+      ), 0) AS last_amount
+    FROM loan_payments lp
+    GROUP BY lp.loan_id
+  `).all();
+}
+
+export function payLoan(input = {}) {
+  const loanId = String(input.loanId || input.loan_id || '').trim();
+  if (!loanId) {
+    throw new Error('loanId is required.');
+  }
+
+  const paidAtRaw = input.paidAt || input.paid_at || new Date().toISOString();
+  const paidAt = String(paidAtRaw).trim() || new Date().toISOString();
+  const note = typeof input.note === 'string' ? input.note.trim() : null;
+  const requestedAmount = sanitizeNumber(input.amount, 0);
+
+  const execute = db.transaction(() => {
+    const loan = db.prepare('SELECT * FROM loans WHERE id = ?').get(loanId);
+    if (!loan) {
+      throw new Error(`Loan not found: ${loanId}`);
+    }
+
+    const balanceBefore = Math.max(0, sanitizeNumber(loan.current_balance, 0));
+    const scheduledPayment = Math.max(0, sanitizeNumber(loan.payment_amount, 0));
+    const paymentAmount = Math.max(
+      0,
+      Math.min(balanceBefore, requestedAmount > 0 ? requestedAmount : scheduledPayment)
+    );
+    const balanceAfter = Math.max(0, Number((balanceBefore - paymentAmount).toFixed(2)));
+
+    if (paymentAmount <= 0) {
+      return { loan, payment: null };
+    }
+
+    const paymentId = createAuditId('loan_payment');
+    db.prepare(`
+      INSERT INTO loan_payments (id, loan_id, amount, balance_before, balance_after, paid_at, note)
+      VALUES (@id, @loanId, @amount, @balanceBefore, @balanceAfter, @paidAt, @note)
+    `).run({
+      id: paymentId,
+      loanId,
+      amount: paymentAmount,
+      balanceBefore,
+      balanceAfter,
+      paidAt,
+      note
+    });
+
+    db.prepare(`
+      UPDATE loans
+      SET current_balance = @currentBalance,
+          due_status = @dueStatus
+      WHERE id = @id
+    `).run({
+      id: loanId,
+      currentBalance: balanceAfter,
+      dueStatus: balanceAfter <= 0 ? 'upcoming' : (loan.due_status || 'upcoming')
+    });
+
+    const updatedLoan = db.prepare('SELECT * FROM loans WHERE id = ?').get(loanId);
+    const payment = db.prepare('SELECT * FROM loan_payments WHERE id = ?').get(paymentId);
+    return { loan: updatedLoan, payment };
+  });
+
+  const result = execute();
+  evaluateCashCollisionAlerts(db);
+  markSettlementDirty(db, getMonthFromDate(paidAt) || new Date().toISOString().slice(0, 7), `Loan ${loanId} payment posted.`);
+  refreshRealtimeState();
+  return result;
 }
 
 export function saveLoan(loan) {
@@ -1207,13 +1684,17 @@ export function saveLoan(loan) {
     nextDueDate: loan.next_due_date || loan.end_date || null,
     dueStatus: loan.due_status || 'upcoming'
   });
+  evaluateCashCollisionAlerts(db);
   markSettlementDirty(db, new Date().toISOString().slice(0, 7), `Loan ${loan.id} updated.`);
+  refreshRealtimeState();
   return loan;
 }
 
 export function deleteLoan(id) {
   db.prepare('DELETE FROM loans WHERE id = ?').run(id);
+  evaluateCashCollisionAlerts(db);
   markSettlementDirty(db, new Date().toISOString().slice(0, 7), `Loan ${id} deleted.`);
+  refreshRealtimeState();
 }
 
 // -- Plans --
@@ -1246,11 +1727,13 @@ export function savePlan(plan) {
     outcome: plan.outcome || null,
     monthsOverdue: Number(plan.months_overdue || 0)
   });
+  refreshRealtimeState();
   return plan;
 }
 
 export function deletePlan(id) {
   db.prepare('DELETE FROM plans WHERE id = ?').run(id);
+  refreshRealtimeState();
 }
 
 // -- Tax Rules / App Settings --
@@ -1269,6 +1752,192 @@ export function setAppSetting(key, value) {
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
   `).run(key, value);
   return { key, value };
+}
+
+export function getMetadata(filter = {}) {
+  const conditions = [];
+  const params = [];
+  let query = 'SELECT * FROM entity_metadata';
+
+  if (filter.scopeType || filter.scope_type) {
+    conditions.push('scope_type = ?');
+    params.push(filter.scopeType || filter.scope_type);
+  }
+
+  if (filter.scopeId || filter.scope_id) {
+    conditions.push('scope_id = ?');
+    params.push(filter.scopeId || filter.scope_id);
+  }
+
+  if (filter.metadataKey || filter.metadata_key || filter.key) {
+    conditions.push('metadata_key = ?');
+    params.push(filter.metadataKey || filter.metadata_key || filter.key);
+  }
+
+  if (filter.updatedAfter || filter.updated_after) {
+    conditions.push('updated_at >= ?');
+    params.push(filter.updatedAfter || filter.updated_after);
+  }
+
+  if (conditions.length > 0) {
+    query += ` WHERE ${conditions.join(' AND ')}`;
+  }
+
+  query += ' ORDER BY updated_at DESC';
+  const limit = Math.max(1, Math.min(5000, Number(filter.limit) || 200));
+  query += ` LIMIT ${limit}`;
+
+  return db.prepare(query).all(...params).map((row) => normalizeMetadataRow(row));
+}
+
+export function setMetadata(input = {}) {
+  const scopeType = String(input.scopeType || input.scope_type || '').trim();
+  const scopeId = String(input.scopeId || input.scope_id || '').trim();
+  const metadataKey = String(input.metadataKey || input.metadata_key || input.key || '').trim();
+
+  if (!scopeType || !scopeId || !metadataKey) {
+    throw new Error('scopeType, scopeId, and metadataKey are required.');
+  }
+
+  const valueJson = JSON.stringify(input.value ?? null);
+  const tagsJson = Array.isArray(input.tags) ? JSON.stringify(input.tags) : null;
+  const updatedAt = String(input.updatedAt || input.updated_at || new Date().toISOString());
+
+  db.prepare(`
+    INSERT INTO entity_metadata (scope_type, scope_id, metadata_key, value_json, tags_json, updated_at)
+    VALUES (@scopeType, @scopeId, @metadataKey, @valueJson, @tagsJson, @updatedAt)
+    ON CONFLICT(scope_type, scope_id, metadata_key) DO UPDATE SET
+      value_json = excluded.value_json,
+      tags_json = excluded.tags_json,
+      updated_at = excluded.updated_at
+  `).run({
+    scopeType,
+    scopeId,
+    metadataKey,
+    valueJson,
+    tagsJson,
+    updatedAt
+  });
+
+  return normalizeMetadataRow(
+    db.prepare(`
+      SELECT * FROM entity_metadata
+      WHERE scope_type = ? AND scope_id = ? AND metadata_key = ?
+    `).get(scopeType, scopeId, metadataKey)
+  );
+}
+
+export function deleteMetadata(input = {}) {
+  const scopeType = String(input.scopeType || input.scope_type || '').trim();
+  const scopeId = String(input.scopeId || input.scope_id || '').trim();
+  const metadataKey = String(input.metadataKey || input.metadata_key || input.key || '').trim();
+
+  if (!scopeType) {
+    throw new Error('scopeType is required to delete metadata.');
+  }
+
+  if (scopeId && metadataKey) {
+    const result = db.prepare(`
+      DELETE FROM entity_metadata
+      WHERE scope_type = ? AND scope_id = ? AND metadata_key = ?
+    `).run(scopeType, scopeId, metadataKey);
+    return { deleted: result.changes };
+  }
+
+  if (scopeId) {
+    const result = db.prepare(`
+      DELETE FROM entity_metadata
+      WHERE scope_type = ? AND scope_id = ?
+    `).run(scopeType, scopeId);
+    return { deleted: result.changes };
+  }
+
+  const result = db.prepare('DELETE FROM entity_metadata WHERE scope_type = ?').run(scopeType);
+  return { deleted: result.changes };
+}
+
+export function getRealtimeState(filter = {}) {
+  const includeExpiredInput = filter.includeExpired ?? filter.include_expired;
+  const includeExpired = includeExpiredInput === true || String(includeExpiredInput || '').toLowerCase() === 'true';
+  const stateKey = String(filter.stateKey || filter.state_key || '').trim();
+  const now = new Date().toISOString();
+
+  if (stateKey) {
+    const row = db.prepare('SELECT * FROM realtime_state WHERE state_key = ?').get(stateKey);
+    if (!row) return null;
+    if (!includeExpired && row.expires_at && row.expires_at <= now) return null;
+    return normalizeRealtimeStateRow(row);
+  }
+
+  const conditions = [];
+  const params = [];
+  let query = 'SELECT * FROM realtime_state';
+
+  if (!includeExpired) {
+    conditions.push('(expires_at IS NULL OR expires_at > ?)');
+    params.push(now);
+  }
+
+  if (filter.prefix) {
+    conditions.push('state_key LIKE ?');
+    params.push(`${String(filter.prefix)}%`);
+  }
+
+  if (conditions.length > 0) {
+    query += ` WHERE ${conditions.join(' AND ')}`;
+  }
+
+  query += ' ORDER BY updated_at DESC';
+  const limit = Math.max(1, Math.min(5000, Number(filter.limit) || 200));
+  query += ` LIMIT ${limit}`;
+
+  return db.prepare(query).all(...params).map((row) => normalizeRealtimeStateRow(row));
+}
+
+export function setRealtimeState(input = {}) {
+  const stateKey = String(input.stateKey || input.state_key || '').trim();
+  if (!stateKey) {
+    throw new Error('stateKey is required.');
+  }
+
+  return setRealtimeStateInternal(stateKey, input.payload ?? input.value ?? {}, {
+    updatedAt: input.updatedAt || input.updated_at || new Date().toISOString(),
+    ttlSeconds: input.ttlSeconds ?? input.ttl_seconds ?? 0
+  });
+}
+
+export function refreshRealtimeState() {
+  if (!db) return null;
+  const payload = buildRealtimeSummaryPayload();
+  return setRealtimeStateInternal('system.summary', payload, {
+    updatedAt: payload.generatedAt,
+    ttlSeconds: 120
+  });
+}
+
+export function optimizeDatabase(options = {}) {
+  if (!db) return { optimizedAt: null, skipped: true };
+
+  db.pragma('analysis_limit = 400');
+  db.pragma('optimize');
+
+  const checkpointModeInput = String(options.checkpointMode || options.checkpoint_mode || 'PASSIVE').toUpperCase();
+  const checkpointMode = ['PASSIVE', 'FULL', 'RESTART', 'TRUNCATE'].includes(checkpointModeInput)
+    ? checkpointModeInput
+    : 'PASSIVE';
+  if (options.checkpoint !== false) {
+    db.pragma(`wal_checkpoint(${checkpointMode})`);
+  }
+
+  if (options.vacuum === true) {
+    db.exec('VACUUM');
+  }
+
+  const state = refreshRealtimeState();
+  return {
+    optimizedAt: new Date().toISOString(),
+    realtimeStateVersion: state?.version || null
+  };
 }
 
 export function getSchemaStatus() {
@@ -1438,6 +2107,7 @@ export function saveRecurringItem(item) {
     lastAppliedAt: item.last_applied_at || null
   });
   markSettlementDirty(db, new Date().toISOString().slice(0, 7), `Recurring item ${item.id} updated.`);
+  refreshRealtimeState();
 
   return db.prepare('SELECT * FROM recurring_items WHERE id = ?').get(item.id);
 }
@@ -1445,6 +2115,7 @@ export function saveRecurringItem(item) {
 export function deleteRecurringItem(id) {
   db.prepare('DELETE FROM recurring_items WHERE id = ?').run(id);
   markSettlementDirty(db, new Date().toISOString().slice(0, 7), `Recurring item ${id} deleted.`);
+  refreshRealtimeState();
 }
 
 const withPermissionContext = (context = {}, defaults = {}) => ({
@@ -1533,6 +2204,8 @@ export function getAlertsList(filter = {}, context = {}) {
     scopeId: 'alerts',
     requiredRole: 'Viewer'
   }));
+  evaluateCashCollisionAlerts(db);
+  refreshRealtimeState();
   return getAlerts(db, filter);
 }
 
@@ -1545,6 +2218,7 @@ export function setAlertStatus(id, status, options = {}, context = {}) {
   const existing = db.prepare('SELECT * FROM alerts WHERE id = ?').get(id);
   const updated = updateAlertStatus(db, id, status, options);
   logAlertEvent(updated || existing, `set_status:${status}`, existing?.status || null, updated?.status || status, context, options);
+  refreshRealtimeState();
   return updated;
 }
 
@@ -1554,6 +2228,8 @@ export function getAlertSummary(context = {}) {
     scopeId: 'alerts',
     requiredRole: 'Viewer'
   }));
+  evaluateCashCollisionAlerts(db);
+  refreshRealtimeState();
   return summarizeAlertCounts(db);
 }
 
@@ -1612,6 +2288,8 @@ export function getSystemState(month, context = {}) {
     scopeId: 'alerts',
     requiredRole: 'Viewer'
   }));
+  evaluateCashCollisionAlerts(db);
+  refreshRealtimeState();
 
   const settlement = getSettlementByMonth(db, normalizedMonth);
   const report = getMonthlyReportByMonth(db, normalizedMonth);
@@ -1636,6 +2314,15 @@ export function getSystemState(month, context = {}) {
         },
     alerts: summarizeAlertCounts(db)
   };
+}
+
+export function getCashCollisionForecast(options = {}, context = {}) {
+  enforcePermission(db, withPermissionContext(context, {
+    scopeType: 'module',
+    scopeId: 'alerts',
+    requiredRole: 'Viewer'
+  }));
+  return buildCashCollisionForecast(db, options || {});
 }
 
 // -- Settlements / Reports --
@@ -1918,12 +2605,7 @@ export function exportShareSnapshotEntry(id, context = {}) {
 // -- Backup / Restore --
 export function resetAllData() {
   const tx = db.transaction(() => {
-    db.prepare('DELETE FROM transaction_tags').run();
-    db.prepare('DELETE FROM transaction_labels').run();
     db.prepare('DELETE FROM goal_contributions').run();
-    db.prepare('DELETE FROM alert_events').run();
-    db.prepare('DELETE FROM settlement_events').run();
-    db.prepare('DELETE FROM report_exports').run();
     db.prepare('DELETE FROM share_snapshots').run();
     db.prepare('DELETE FROM monthly_reports').run();
     db.prepare('DELETE FROM monthly_settlements').run();
@@ -1934,6 +2616,8 @@ export function resetAllData() {
     db.prepare('DELETE FROM budgets').run();
     db.prepare('DELETE FROM goals').run();
     db.prepare('DELETE FROM bills').run();
+    db.prepare('DELETE FROM realtime_state').run();
+    db.prepare('DELETE FROM entity_metadata').run();
     db.prepare('DELETE FROM loans').run();
     db.prepare('DELETE FROM plans').run();
     db.prepare('DELETE FROM classification_rules').run();
@@ -1950,6 +2634,7 @@ export function resetAllData() {
   seedInitialData();
   initializeSchemaVersioning();
   ensureDefaultOwnerPermission(db);
+  refreshRealtimeState();
 }
 
 export function restoreAllData(payload) {
@@ -1969,6 +2654,9 @@ export function restoreAllData(payload) {
     goal_contributions = [],
     bills = [],
     loans = [],
+    loan_payments = [],
+    realtime_state = [],
+    metadata_entries = [],
     plans = [],
     recurring_items = [],
     scenarios = [],
@@ -2116,6 +2804,34 @@ export function restoreAllData(payload) {
       `).run(l);
     }
 
+    for (const lp of loan_payments) {
+      db.prepare(`
+        INSERT INTO loan_payments (id, loan_id, amount, balance_before, balance_after, paid_at, note, created_at)
+        VALUES (@id, @loan_id, @amount, @balance_before, @balance_after, @paid_at, @note, @created_at)
+        ON CONFLICT(id) DO UPDATE SET
+          loan_id=@loan_id, amount=@amount, balance_before=@balance_before, balance_after=@balance_after,
+          paid_at=@paid_at, note=@note, created_at=@created_at
+      `).run(lp);
+    }
+
+    for (const rt of realtime_state) {
+      db.prepare(`
+        INSERT INTO realtime_state (state_key, payload_json, version, updated_at, expires_at)
+        VALUES (@state_key, @payload_json, @version, @updated_at, @expires_at)
+        ON CONFLICT(state_key) DO UPDATE SET
+          payload_json=@payload_json, version=@version, updated_at=@updated_at, expires_at=@expires_at
+      `).run(rt);
+    }
+
+    for (const meta of metadata_entries) {
+      db.prepare(`
+        INSERT INTO entity_metadata (scope_type, scope_id, metadata_key, value_json, tags_json, updated_at, created_at)
+        VALUES (@scope_type, @scope_id, @metadata_key, @value_json, @tags_json, @updated_at, @created_at)
+        ON CONFLICT(scope_type, scope_id, metadata_key) DO UPDATE SET
+          value_json=@value_json, tags_json=@tags_json, updated_at=@updated_at, created_at=@created_at
+      `).run(meta);
+    }
+
     for (const p of plans) {
       db.prepare(`
         INSERT INTO plans (id, item_type, item_id, title, scenario_if, scenario_else, what_if, outcome, months_overdue, created_at)
@@ -2241,4 +2957,5 @@ export function restoreAllData(payload) {
   tx();
   initializeSchemaVersioning();
   ensureDefaultOwnerPermission(db);
+  refreshRealtimeState();
 }

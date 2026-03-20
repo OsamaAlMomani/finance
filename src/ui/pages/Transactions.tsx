@@ -35,6 +35,39 @@ interface Account {
 
 type TransactionType = Transaction['type'];
 
+interface TransactionFormState {
+  amount: string;
+  merchant: string;
+  date: string;
+  category: string;
+  account: string;
+  toAccount: string;
+  type: TransactionType;
+  notes: string;
+  tags: string;
+}
+
+interface TransactionSavePayload {
+  id: string;
+  amount: number;
+  date: string;
+  merchant: string;
+  notes: string;
+  tags: string[];
+  category: string;
+  accountId: string;
+  toAccountId: string | null;
+  type: TransactionType;
+}
+
+interface ImportNotice {
+  ids: string[];
+  success: number;
+  updated: number;
+  failed: number;
+  type: string;
+}
+
 // Helper to parse tags from comma‑separated string
 const parseTags = (input: string): string[] =>
   input.split(',').map(t => t.trim()).filter(t => t.length > 0);
@@ -256,8 +289,43 @@ const TransactionRow = ({
 };
 
 // Add/Edit Modal (with advanced toggle and merchant suggestions)
+const buildInitialForm = (
+  editingTx: Transaction | null,
+  accounts: Account[],
+  categories: Category[]
+): TransactionFormState => {
+  if (editingTx) {
+    return {
+      amount: editingTx.amount.toString(),
+      merchant: editingTx.merchant,
+      date: editingTx.date,
+      category: editingTx.category_id,
+      account: editingTx.account_id,
+      toAccount: editingTx.to_account_id || '',
+      type: editingTx.type,
+      notes: editingTx.notes || '',
+      tags: editingTx.tags ? joinTags(editingTx.tags) : ''
+    };
+  }
+
+  const defaultType: TransactionType = 'expense';
+  const defaultCategory = categories.find((c) => c.type === defaultType)?.id || '';
+  const defaultAccount = accounts[0]?.id || '';
+
+  return {
+    amount: '',
+    merchant: '',
+    date: new Date().toISOString().split('T')[0],
+    category: defaultCategory,
+    account: defaultAccount,
+    toAccount: '',
+    type: defaultType,
+    notes: '',
+    tags: ''
+  };
+};
+
 const TransactionModal = ({
-  isOpen,
   onClose,
   editingTx,
   accounts,
@@ -265,69 +333,23 @@ const TransactionModal = ({
   onSave,
   merchantSuggestions,
 }: {
-  isOpen: boolean;
   onClose: () => void;
   editingTx: Transaction | null;
   accounts: Account[];
   categories: Category[];
-  onSave: (txData: any) => Promise<void>;
+  onSave: (txData: TransactionSavePayload) => Promise<void>;
   merchantSuggestions: string[]; // list of past merchants for autocomplete
 }) => {
   const { t } = useI18n();
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [form, setForm] = useState({
-    amount: '',
-    merchant: '',
-    date: new Date().toISOString().split('T')[0],
-    category: '',
-    account: '',
-    toAccount: '',
-    type: 'expense' as TransactionType,
-    notes: '',
-    tags: '',
-  });
-
-  // Reset form when modal opens/closes or editingTx changes
-  useEffect(() => {
-    if (!isOpen) return;
-    if (editingTx) {
-      setForm({
-        amount: editingTx.amount.toString(),
-        merchant: editingTx.merchant,
-        date: editingTx.date,
-        category: editingTx.category_id,
-        account: editingTx.account_id,
-        toAccount: editingTx.to_account_id || '',
-        type: editingTx.type,
-        notes: editingTx.notes || '',
-        tags: editingTx.tags ? joinTags(editingTx.tags) : '',
-      });
-      setShowAdvanced(true); // show all fields when editing
-    } else {
-      const defaultType = 'expense';
-      const defaultCategory = categories.find((c) => c.type === defaultType)?.id || '';
-      const defaultAccount = accounts[0]?.id || '';
-      setForm({
-        amount: '',
-        merchant: '',
-        date: new Date().toISOString().split('T')[0],
-        category: defaultCategory,
-        account: defaultAccount,
-        toAccount: '',
-        type: defaultType,
-        notes: '',
-        tags: '',
-      });
-      setShowAdvanced(false); // start with simple form
-    }
-  }, [isOpen, editingTx, accounts, categories]);
+  const [showAdvanced, setShowAdvanced] = useState(Boolean(editingTx));
+  const [form, setForm] = useState<TransactionFormState>(() => buildInitialForm(editingTx, accounts, categories));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     // Ensure required fields: amount, merchant, date, type, and for transfers: toAccount
     if (!form.amount || !form.merchant || !form.date) return;
 
-    const payload: any = {
+    const payload: TransactionSavePayload = {
       id: editingTx ? editingTx.id : uuidv4(),
       amount: parseFloat(form.amount),
       date: form.date,
@@ -343,8 +365,6 @@ const TransactionModal = ({
     await onSave(payload);
     onClose();
   };
-
-  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
@@ -564,7 +584,7 @@ export const Transactions = () => {
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [searchText, setSearchText] = useState('');
-  const [importNotice, setImportNotice] = useState<any>(null);
+  const [importNotice, setImportNotice] = useState<ImportNotice | null>(null);
   const [compactView, setCompactView] = useState(false); // new state for compact mode
 
   // Load data
@@ -578,7 +598,7 @@ export const Transactions = () => {
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
-        if (parsed && Array.isArray(parsed.ids)) setImportNotice(parsed);
+        if (parsed && Array.isArray(parsed.ids)) setImportNotice(parsed as ImportNotice);
       } catch { setImportNotice(null); }
     }
   }, []);
@@ -616,10 +636,10 @@ export const Transactions = () => {
   const loadData = async () => {
     if (!window.electron) return;
     try {
-      const txs = await window.electron.invoke('db-get-transactions', {});
-      const accs = await window.electron.invoke('db-get-accounts');
-      const cats = await window.electron.invoke('db-get-categories');
-      const processedTxs = txs.map((tx: any) => ({
+      const txs = await window.electron.invoke('db-get-transactions', {}) as Transaction[];
+      const accs = await window.electron.invoke('db-get-accounts') as Account[];
+      const cats = await window.electron.invoke('db-get-categories') as Category[];
+      const processedTxs: Transaction[] = txs.map((tx) => ({
         ...tx,
         tags: tx.tags ? (Array.isArray(tx.tags) ? tx.tags : JSON.parse(tx.tags)) : [],
       }));
@@ -629,7 +649,7 @@ export const Transactions = () => {
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
-  const handleSave = async (txData: any) => {
+  const handleSave = async (txData: TransactionSavePayload) => {
     if (!window.electron) return;
     const payload = { ...txData, tags: JSON.stringify(txData.tags) };
     if (editingTx) await window.electron.invoke('db-update-transaction', payload);
@@ -774,15 +794,16 @@ export const Transactions = () => {
       </div>
 
       {/* Add/Edit modal */}
-      <TransactionModal
-        isOpen={showAddModal}
-        onClose={() => { setShowAddModal(false); setEditingTx(null); }}
-        editingTx={editingTx}
-        accounts={accounts}
-        categories={categories}
-        onSave={handleSave}
-        merchantSuggestions={merchantSuggestions}
-      />
+      {showAddModal && (
+        <TransactionModal
+          onClose={() => { setShowAddModal(false); setEditingTx(null); }}
+          editingTx={editingTx}
+          accounts={accounts}
+          categories={categories}
+          onSave={handleSave}
+          merchantSuggestions={merchantSuggestions}
+        />
+      )}
     </div>
   );
 };
