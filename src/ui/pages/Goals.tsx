@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Target, Plus, Trash2, Edit2, TrendingUp } from 'lucide-react';
 import { useI18n } from '../contexts/useI18n';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 interface Goal {
   id: string;
@@ -9,6 +10,7 @@ interface Goal {
   target_amount: number;
   current_amount: number;
   target_date: string;
+  linked_account_id?: string | null;
   goal_type?: 'standard' | 'mission_capital';
   priority?: 'low' | 'medium' | 'high';
   funding_source?: string;
@@ -24,47 +26,59 @@ interface GoalContribution {
   notes?: string;
 }
 
+interface Account {
+  id: string;
+  name: string;
+}
+
 export const GoalsPage = () => {
     const { t } = useI18n();
     const [goals, setGoals] = useState<Goal[]>([]);
+    const [accounts, setAccounts] = useState<Account[]>([]);
     const [showModal, setShowModal] = useState(false);
     const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
     const [showProgressModal, setShowProgressModal] = useState(false);
     const [progressGoal, setProgressGoal] = useState<Goal | null>(null);
     const [progressAmount, setProgressAmount] = useState('');
+    const [formError, setFormError] = useState('');
+    const [progressError, setProgressError] = useState('');
+    const [pendingDeleteGoalId, setPendingDeleteGoalId] = useState<string | null>(null);
     const [contributions, setContributions] = useState<GoalContribution[]>([]);
     const [newGoal, setNewGoal] = useState({
         name: '',
         target: '',
         date: '',
         current: '0',
+        linked_account_id: '',
         goal_type: 'standard',
         priority: 'medium',
         funding_source: '',
         risk_status: 'normal'
     });
 
-    const loadGoals = () => {
+    const loadGoals = useCallback(() => {
         if(window.electron) {
             Promise.all([
               window.electron.invoke('db-get-goals'),
-              window.electron.invoke('db-get-goal-contributions').catch(() => [])
-            ]).then(([goalsData, contributionsData]) => {
+              window.electron.invoke('db-get-goal-contributions').catch(() => []),
+              window.electron.invoke('db-get-accounts').catch(() => [])
+            ]).then(([goalsData, contributionsData, accountData]) => {
               setGoals(goalsData);
               setContributions(Array.isArray(contributionsData) ? contributionsData : []);
+              setAccounts(Array.isArray(accountData) ? accountData : []);
             });
         }
-    };
+    }, []);
 
     useEffect(() => {
         loadGoals();
-    }, []);
+    }, [loadGoals]);
 
     useEffect(() => {
         const onChanged = () => loadGoals();
         window.addEventListener('finance:data-changed', onChanged);
         return () => window.removeEventListener('finance:data-changed', onChanged);
-    }, []);
+    }, [loadGoals]);
 
     const handleOpenModal = (goal?: Goal) => {
         if (goal) {
@@ -74,6 +88,7 @@ export const GoalsPage = () => {
                 target: goal.target_amount.toString(),
                 date: goal.target_date,
                 current: goal.current_amount.toString(),
+                linked_account_id: goal.linked_account_id || '',
                 goal_type: goal.goal_type || 'standard',
                 priority: goal.priority || 'medium',
                 funding_source: goal.funding_source || '',
@@ -81,52 +96,70 @@ export const GoalsPage = () => {
             });
         } else {
             setEditingGoal(null);
-            setNewGoal({ name: '', target: '', date: '', current: '0', goal_type: 'standard', priority: 'medium', funding_source: '', risk_status: 'normal' });
+            setNewGoal({ name: '', target: '', date: '', current: '0', linked_account_id: '', goal_type: 'standard', priority: 'medium', funding_source: '', risk_status: 'normal' });
         }
+        setFormError('');
         setShowModal(true);
     };
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         if(!window.electron) return;
-        
-        if (editingGoal) {
-            // Update existing goal
-            await window.electron.invoke('db-update-goal', {
-                id: editingGoal.id,
-                name: newGoal.name,
-                target_amount: parseFloat(newGoal.target),
-                target_date: newGoal.date,
-                current_amount: parseFloat(newGoal.current),
-                linked_account_id: null,
-                goal_type: newGoal.goal_type,
-                priority: newGoal.priority,
-                funding_source: newGoal.funding_source || null,
-                risk_status: newGoal.risk_status
-            });
-        } else {
-            // Create new goal
-            await window.electron.invoke('db-save-goal', {
-                id: uuidv4(),
-                name: newGoal.name,
-                target_amount: parseFloat(newGoal.target),
-                target_date: newGoal.date,
-                current_amount: parseFloat(newGoal.current),
-                linked_account_id: null,
-                goal_type: newGoal.goal_type,
-                priority: newGoal.priority,
-                funding_source: newGoal.funding_source || null,
-                risk_status: newGoal.risk_status
-            });
+
+        const targetAmount = Number.parseFloat(newGoal.target);
+        const currentAmount = Number.parseFloat(newGoal.current || '0');
+        if (!Number.isFinite(targetAmount) || targetAmount <= 0) {
+            setFormError(t('import.errors.invalidNumber', { field: t('goals.targetAmount') }));
+            return;
         }
-        setShowModal(false);
-        window.dispatchEvent(new CustomEvent('finance:data-changed'));
-        loadGoals();
+        if (!Number.isFinite(currentAmount) || currentAmount < 0) {
+            setFormError(t('import.errors.invalidNumber', { field: t('goals.current') }));
+            return;
+        }
+        
+        try {
+            if (editingGoal) {
+                // Update existing goal
+                await window.electron.invoke('db-update-goal', {
+                    id: editingGoal.id,
+                    name: newGoal.name.trim(),
+                    target_amount: targetAmount,
+                    target_date: newGoal.date,
+                    current_amount: currentAmount,
+                    linked_account_id: newGoal.linked_account_id || null,
+                    goal_type: newGoal.goal_type,
+                    priority: newGoal.priority,
+                    funding_source: newGoal.funding_source || null,
+                    risk_status: newGoal.risk_status
+                });
+            } else {
+                // Create new goal
+                await window.electron.invoke('db-save-goal', {
+                    id: uuidv4(),
+                    name: newGoal.name.trim(),
+                    target_amount: targetAmount,
+                    target_date: newGoal.date,
+                    current_amount: currentAmount,
+                    linked_account_id: newGoal.linked_account_id || null,
+                    goal_type: newGoal.goal_type,
+                    priority: newGoal.priority,
+                    funding_source: newGoal.funding_source || null,
+                    risk_status: newGoal.risk_status
+                });
+            }
+            setFormError('');
+            setShowModal(false);
+            window.dispatchEvent(new CustomEvent('finance:data-changed'));
+            loadGoals();
+        } catch (error) {
+            setFormError(error instanceof Error ? error.message : t('import.errors.unknown'));
+        }
     };
 
     const handleOpenProgressModal = (goal: Goal) => {
         setProgressGoal(goal);
         setProgressAmount('');
+        setProgressError('');
         setShowProgressModal(true);
     };
 
@@ -134,26 +167,37 @@ export const GoalsPage = () => {
         e.preventDefault();
         if (!window.electron || !progressGoal) return;
 
-        const newAmount = progressGoal.current_amount + parseFloat(progressAmount);
-        await window.electron.invoke('db-update-goal', {
-            id: progressGoal.id,
-            name: progressGoal.name,
-            target_amount: progressGoal.target_amount,
-            target_date: progressGoal.target_date,
-            current_amount: newAmount,
-            linked_account_id: null,
-            goal_type: progressGoal.goal_type || 'standard',
-            priority: progressGoal.priority || 'medium',
-            funding_source: progressGoal.funding_source || null,
-            risk_status: progressGoal.risk_status || 'normal'
-        });
-        setShowProgressModal(false);
-        window.dispatchEvent(new CustomEvent('finance:data-changed'));
-        loadGoals();
+        const amount = Number.parseFloat(progressAmount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            setProgressError(t('import.errors.invalidNumber', { field: t('goals.addAmount') }));
+            return;
+        }
+
+        try {
+            await window.electron.invoke('db-add-goal-contribution', {
+                goalId: progressGoal.id,
+                amount,
+                date: new Date().toISOString().slice(0, 10),
+                sourceType: 'manual',
+                notes: `Manual goal progress for ${progressGoal.name}`
+            });
+            setProgressError('');
+            setShowProgressModal(false);
+            window.dispatchEvent(new CustomEvent('finance:data-changed'));
+            loadGoals();
+        } catch (error) {
+            setProgressError(error instanceof Error ? error.message : t('import.errors.unknown'));
+        }
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm(t('goals.deleteConfirm'))) return;
+        setPendingDeleteGoalId(id);
+    };
+
+    const confirmDeleteGoal = async () => {
+        const id = pendingDeleteGoalId;
+        if (!id) return;
+        setPendingDeleteGoalId(null);
         if (!window.electron) return;
         await window.electron.invoke('db-delete-goal', id);
         window.dispatchEvent(new CustomEvent('finance:data-changed'));
@@ -161,7 +205,7 @@ export const GoalsPage = () => {
     };
 
     return (
-        <div className="h-full flex flex-col overflow-hidden">
+        <div className="h-full min-h-0 flex flex-col overflow-hidden">
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-3xl font-bold font-heading">{t('goals.title')}</h2>
                 <button onClick={() => handleOpenModal()} className="btn bg-purple-500 text-white flex items-center gap-2">
@@ -257,6 +301,9 @@ export const GoalsPage = () => {
                             {editingGoal ? t('goals.edit') : t('goals.set')}
                         </h3>
                         <form onSubmit={handleSave} className="space-y-3">
+                            {formError && (
+                                <p className="text-sm text-red-600 font-semibold" role="alert">{formError}</p>
+                            )}
                             <label htmlFor="goal-name" className="block text-sm font-bold mb-1">{t('goals.goalName')}</label>
                             <input 
                                 id="goal-name"
@@ -303,6 +350,22 @@ export const GoalsPage = () => {
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label htmlFor="goal-account" className="text-xs font-bold text-gray-500">Linked Account</label>
+                                    <select
+                                        id="goal-account"
+                                        className="w-full p-2 border rounded font-hand text-lg"
+                                        value={newGoal.linked_account_id}
+                                        onChange={e => setNewGoal({ ...newGoal, linked_account_id: e.target.value })}
+                                    >
+                                        <option value="">none</option>
+                                        {accounts.map((account) => (
+                                            <option key={account.id} value={account.id}>
+                                                {account.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
                                 <div>
                                     <label htmlFor="goal-type" className="text-xs font-bold text-gray-500">Goal Type</label>
                                     <select
@@ -374,6 +437,9 @@ export const GoalsPage = () => {
                             {t('goals.currentSummary', { current: progressGoal.current_amount, target: progressGoal.target_amount })}
                         </p>
                         <form onSubmit={handleUpdateProgress} className="space-y-4">
+                            {progressError && (
+                                <p className="text-sm text-red-600 font-semibold" role="alert">{progressError}</p>
+                            )}
                             <div>
                                 <label htmlFor="progress-amount" className="block text-sm font-bold mb-1">
                                     {t('goals.addAmount')}
@@ -410,6 +476,17 @@ export const GoalsPage = () => {
                     </div>
                 </div>
             )}
+
+            <ConfirmDialog
+                open={Boolean(pendingDeleteGoalId)}
+                title={t('common.delete')}
+                message={t('goals.deleteConfirm')}
+                destructive
+                onCancel={() => setPendingDeleteGoalId(null)}
+                onConfirm={() => {
+                    void confirmDeleteGoal();
+                }}
+            />
         </div>
     );
 };

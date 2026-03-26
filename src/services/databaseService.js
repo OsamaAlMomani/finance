@@ -55,6 +55,17 @@ import {
   listShareSnapshots,
   revokeShareSnapshot
 } from './v2/sharingService.js';
+import {
+  buildDashboardOptimizationPayload,
+  normalizeOptimizationPeriod
+} from './v2/dashboardOptimizationService.js';
+import {
+  ensureEnum,
+  ensureIsoDate,
+  ensureNumber,
+  ensureString,
+  toBooleanFlag
+} from './v2/inputValidation.js';
 
 let db;
 const SCHEMA_VERSION = 2;
@@ -251,9 +262,11 @@ function createTables() {
       payment_frequency TEXT DEFAULT 'monthly',
       start_date TEXT NOT NULL,
       end_date TEXT,
+      linked_account_id TEXT,
       lender TEXT NOT NULL,
       notes TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(linked_account_id) REFERENCES accounts(id) ON DELETE SET NULL
     );
 
     CREATE TABLE IF NOT EXISTS loan_payments (
@@ -556,8 +569,102 @@ function createTables() {
     };
     addLoanColumnIfMissing('next_due_date', 'next_due_date TEXT');
     addLoanColumnIfMissing('due_status', "due_status TEXT DEFAULT 'upcoming'");
+    addLoanColumnIfMissing('linked_account_id', 'linked_account_id TEXT REFERENCES accounts(id)');
   } catch (e) {
     safeError('Loans v2 migration error:', e);
+  }
+
+  try {
+    // Legacy installs may have an older loan_payments shape (date/notes/principal/interest).
+    // Normalize columns so payment logging and indexes work on both old and new profiles.
+    const loanPaymentsInfo = db.prepare('PRAGMA table_info(loan_payments)').all();
+    if (loanPaymentsInfo.length > 0) {
+      const loanPaymentCols = new Set(loanPaymentsInfo.map((col) => col.name));
+      const hasLegacyLoanPaymentShape =
+        loanPaymentCols.has('date')
+        || loanPaymentCols.has('notes')
+        || loanPaymentCols.has('principal')
+        || loanPaymentCols.has('interest')
+        || loanPaymentCols.has('fees');
+
+      if (hasLegacyLoanPaymentShape) {
+        db.exec('DROP TABLE IF EXISTS loan_payments_legacy_backup');
+        db.exec('ALTER TABLE loan_payments RENAME TO loan_payments_legacy_backup');
+
+        db.exec(`
+          CREATE TABLE loan_payments (
+            id TEXT PRIMARY KEY,
+            loan_id TEXT NOT NULL,
+            amount REAL NOT NULL,
+            balance_before REAL NOT NULL,
+            balance_after REAL NOT NULL,
+            paid_at TEXT NOT NULL,
+            note TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(loan_id) REFERENCES loans(id) ON DELETE CASCADE
+          );
+        `);
+
+        const legacyInfo = db.prepare('PRAGMA table_info(loan_payments_legacy_backup)').all();
+        const legacyCols = new Set(legacyInfo.map((col) => col.name));
+        const paidAtExpr = legacyCols.has('paid_at')
+          ? "NULLIF(TRIM(paid_at), '')"
+          : legacyCols.has('date')
+            ? "NULLIF(TRIM(date), '')"
+            : 'NULL';
+        const createdAtExpr = legacyCols.has('created_at') ? "NULLIF(TRIM(created_at), '')" : 'NULL';
+        const noteExpr = legacyCols.has('note')
+          ? "NULLIF(TRIM(note), '')"
+          : legacyCols.has('notes')
+            ? "NULLIF(TRIM(notes), '')"
+            : 'NULL';
+        const balanceBeforeExpr = legacyCols.has('balance_before') ? 'COALESCE(balance_before, 0)' : '0';
+        const balanceAfterExpr = legacyCols.has('balance_after') ? 'COALESCE(balance_after, 0)' : '0';
+
+        db.exec(`
+          INSERT INTO loan_payments (id, loan_id, amount, balance_before, balance_after, paid_at, note, created_at)
+          SELECT
+            id,
+            loan_id,
+            COALESCE(amount, 0),
+            ${balanceBeforeExpr},
+            ${balanceAfterExpr},
+            COALESCE(${paidAtExpr}, ${createdAtExpr}, datetime('now')),
+            ${noteExpr},
+            COALESCE(${createdAtExpr}, ${paidAtExpr}, datetime('now'))
+          FROM loan_payments_legacy_backup;
+        `);
+
+        db.exec('DROP TABLE loan_payments_legacy_backup');
+      } else {
+        const addLoanPaymentColumnIfMissing = (name, ddl) => {
+          if (!loanPaymentCols.has(name)) {
+            db.exec(`ALTER TABLE loan_payments ADD COLUMN ${ddl}`);
+            loanPaymentCols.add(name);
+          }
+        };
+
+        addLoanPaymentColumnIfMissing('balance_before', 'balance_before REAL NOT NULL DEFAULT 0');
+        addLoanPaymentColumnIfMissing('balance_after', 'balance_after REAL NOT NULL DEFAULT 0');
+        addLoanPaymentColumnIfMissing('paid_at', 'paid_at TEXT');
+        addLoanPaymentColumnIfMissing('note', 'note TEXT');
+        addLoanPaymentColumnIfMissing('created_at', 'created_at TEXT');
+
+        db.exec(`
+          UPDATE loan_payments
+          SET paid_at = COALESCE(NULLIF(TRIM(paid_at), ''), NULLIF(TRIM(created_at), ''), datetime('now'))
+          WHERE paid_at IS NULL OR TRIM(paid_at) = '';
+        `);
+
+        db.exec(`
+          UPDATE loan_payments
+          SET created_at = COALESCE(NULLIF(TRIM(created_at), ''), NULLIF(TRIM(paid_at), ''), datetime('now'))
+          WHERE created_at IS NULL OR TRIM(created_at) = '';
+        `);
+      }
+    }
+  } catch (e) {
+    safeError('Loan payments migration error:', e);
   }
 
   db.exec(`
@@ -959,17 +1066,82 @@ const assertNoDuplicateTransaction = (tx, existingId = null) => {
   return dedupeHash;
 };
 
+const GOAL_MANUAL_SEED_SOURCE = 'manual_seed';
+const getGoalManualSeedId = (goalId) => `goal_seed_${goalId}`;
+
+const recalculateGoalCurrentAmount = (goalId) => {
+  const normalizedGoalId = String(goalId || '').trim();
+  if (!normalizedGoalId) return null;
+
+  db.prepare(`
+    UPDATE goals
+    SET current_amount = COALESCE((
+      SELECT SUM(amount)
+      FROM goal_contributions
+      WHERE goal_id = goals.id
+    ), 0)
+    WHERE id = ?
+  `).run(normalizedGoalId);
+
+  return db.prepare('SELECT * FROM goals WHERE id = ?').get(normalizedGoalId);
+};
+
+const syncGoalManualSeed = (goalId, desiredAmount, options = {}) => {
+  const normalizedGoalId = String(goalId || '').trim();
+  if (!normalizedGoalId) return null;
+
+  const goalExists = db.prepare('SELECT id FROM goals WHERE id = ?').get(normalizedGoalId);
+  if (!goalExists) return null;
+
+  const desired = sanitizeNumber(desiredAmount, 0);
+  const nonSeedTotal = sanitizeNumber(db.prepare(`
+    SELECT COALESCE(SUM(amount), 0) AS total
+    FROM goal_contributions
+    WHERE goal_id = ? AND source_type <> ?
+  `).get(normalizedGoalId, GOAL_MANUAL_SEED_SOURCE)?.total, 0);
+  const seedAmount = Number((desired - nonSeedTotal).toFixed(2));
+  const seedId = getGoalManualSeedId(normalizedGoalId);
+  const seedDate = String(options.date || new Date().toISOString().slice(0, 10)).slice(0, 10);
+
+  if (Math.abs(seedAmount) < 0.005) {
+    db.prepare('DELETE FROM goal_contributions WHERE id = ?').run(seedId);
+    return recalculateGoalCurrentAmount(normalizedGoalId);
+  }
+
+  db.prepare(`
+    INSERT INTO goal_contributions (id, goal_id, transaction_id, amount, date, source_type, source_id, notes)
+    VALUES (@id, @goalId, NULL, @amount, @date, @sourceType, @sourceId, @notes)
+    ON CONFLICT(id) DO UPDATE SET
+      goal_id = @goalId,
+      amount = @amount,
+      date = @date,
+      source_type = @sourceType,
+      source_id = @sourceId,
+      notes = @notes
+  `).run({
+    id: seedId,
+    goalId: normalizedGoalId,
+    amount: seedAmount,
+    date: seedDate,
+    sourceType: GOAL_MANUAL_SEED_SOURCE,
+    sourceId: seedId,
+    notes: options.notes || 'Manual goal baseline adjustment.'
+  });
+
+  return recalculateGoalCurrentAmount(normalizedGoalId);
+};
+
 const transactionToNormalized = (tx) => ({
-  id: tx.id,
-  accountId: tx.accountId || tx.account_id,
+  id: ensureString(tx.id, 'transaction.id', { maxLength: 120 }),
+  accountId: ensureString(tx.accountId || tx.account_id, 'transaction.accountId', { maxLength: 120 }),
   toAccountId: tx.toAccountId || tx.to_account_id || null,
   categoryId: tx.category || tx.category_id || null,
   subcategoryId: tx.subcategory || tx.subcategory_id || null,
-  type: tx.type,
-  amount: sanitizeNumber(tx.amount, 0),
-  date: tx.date,
-  merchant: tx.merchant || '',
-  notes: tx.notes || '',
+  type: ensureEnum(tx.type, 'transaction.type', ['income', 'expense', 'transfer']),
+  amount: ensureNumber(tx.amount, 'transaction.amount', { min: 0.01 }),
+  date: ensureIsoDate(tx.date, 'transaction.date'),
+  merchant: ensureString(tx.merchant || '', 'transaction.merchant', { required: false, allowEmpty: true, maxLength: 200 }),
+  notes: ensureString(tx.notes || '', 'transaction.notes', { required: false, allowEmpty: true, maxLength: 1000 }),
   tags: toArray(tx.tags),
   tagIds: toArray(tx.tagIds || tx.tag_ids),
   labelIds: toArray(tx.labelIds || tx.label_ids),
@@ -980,6 +1152,13 @@ const transactionToNormalized = (tx) => ({
 
 const ensureGoalContribution = (tx) => {
   if (!tx.goalId) return;
+  const goal = db.prepare('SELECT id, current_amount FROM goals WHERE id = ?').get(tx.goalId);
+  if (!goal) return;
+
+  syncGoalManualSeed(goal.id, sanitizeNumber(goal.current_amount, 0), {
+    notes: 'Auto baseline sync before transaction-linked contribution.'
+  });
+
   const amount = tx.type === 'expense' ? -Math.abs(tx.amount) : Math.abs(tx.amount);
   db.prepare(`
     INSERT INTO goal_contributions (id, goal_id, transaction_id, amount, date, source_type, source_id, notes)
@@ -999,31 +1178,14 @@ const ensureGoalContribution = (tx) => {
     sourceId: tx.id,
     notes: tx.notes || ''
   });
-
-  db.prepare(`
-    UPDATE goals
-    SET current_amount = COALESCE((
-      SELECT SUM(amount)
-      FROM goal_contributions
-      WHERE goal_id = goals.id
-    ), 0)
-    WHERE id = ?
-  `).run(tx.goalId);
+  recalculateGoalCurrentAmount(tx.goalId);
 };
 
 const removeGoalContributionByTransaction = (transactionId) => {
   const rows = db.prepare('SELECT goal_id FROM goal_contributions WHERE transaction_id = ?').all(transactionId);
   db.prepare('DELETE FROM goal_contributions WHERE transaction_id = ?').run(transactionId);
   for (const row of rows) {
-    db.prepare(`
-      UPDATE goals
-      SET current_amount = COALESCE((
-        SELECT SUM(amount)
-        FROM goal_contributions
-        WHERE goal_id = goals.id
-      ), 0)
-      WHERE id = ?
-    `).run(row.goal_id);
+    recalculateGoalCurrentAmount(row.goal_id);
   }
 };
 
@@ -1095,37 +1257,71 @@ export function getAccountsWithBalance() {
 }
 
 export function createAccount(account) {
+  const normalizedName = ensureString(account?.name, 'account.name', { maxLength: 120 });
+  const normalizedType = ensureEnum(account?.type, 'account.type', ['checking', 'savings', 'credit', 'cash', 'investment']);
+  const normalizedCurrency = ensureString(account?.currency || 'USD', 'account.currency', {
+    maxLength: 12,
+    defaultValue: 'USD'
+  }).toUpperCase();
+  const normalizedInitialBalance = ensureNumber(account?.initialBalance, 'account.initialBalance', {
+    required: false,
+    defaultValue: 0
+  });
+
   const stmt = db.prepare(`
     INSERT INTO accounts (id, name, type, currency, initial_balance)
     VALUES (@id, @name, @type, @currency, @initialBalance)
   `);
   stmt.run({
     id: account.id,
-    name: account.name,
-    type: account.type,
-    currency: account.currency || 'USD',
-    initialBalance: account.initialBalance || 0
+    name: normalizedName,
+    type: normalizedType,
+    currency: normalizedCurrency,
+    initialBalance: normalizedInitialBalance
   });
   evaluateCashCollisionAlerts(db);
   refreshRealtimeState();
-  return account;
+  return {
+    ...account,
+    name: normalizedName,
+    type: normalizedType,
+    currency: normalizedCurrency,
+    initialBalance: normalizedInitialBalance
+  };
 }
 
 export function updateAccount(account) {
+  const normalizedName = ensureString(account?.name, 'account.name', { maxLength: 120 });
+  const normalizedType = ensureEnum(account?.type, 'account.type', ['checking', 'savings', 'credit', 'cash', 'investment']);
+  const normalizedCurrency = ensureString(account?.currency || 'USD', 'account.currency', {
+    maxLength: 12,
+    defaultValue: 'USD'
+  }).toUpperCase();
+  const normalizedInitialBalance = ensureNumber(account?.initialBalance, 'account.initialBalance', {
+    required: false,
+    defaultValue: 0
+  });
+
   const stmt = db.prepare(`
     UPDATE accounts SET name = @name, type = @type, currency = @currency, initial_balance = @initialBalance
     WHERE id = @id
   `);
   stmt.run({
     id: account.id,
-    name: account.name,
-    type: account.type,
-    currency: account.currency,
-    initialBalance: account.initialBalance
+    name: normalizedName,
+    type: normalizedType,
+    currency: normalizedCurrency,
+    initialBalance: normalizedInitialBalance
   });
   evaluateCashCollisionAlerts(db);
   refreshRealtimeState();
-  return account;
+  return {
+    ...account,
+    name: normalizedName,
+    type: normalizedType,
+    currency: normalizedCurrency,
+    initialBalance: normalizedInitialBalance
+  };
 }
 
 export function deleteAccount(id) {
@@ -1146,6 +1342,7 @@ export function deleteAccount(id) {
 
     db.prepare('DELETE FROM recurring_items WHERE account_id = ?').run(id);
     db.prepare('UPDATE goals SET linked_account_id = NULL WHERE linked_account_id = ?').run(id);
+    db.prepare('UPDATE loans SET linked_account_id = NULL WHERE linked_account_id = ?').run(id);
     db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
   });
   tx();
@@ -1368,6 +1565,86 @@ export function getDashboardStats() {
     };
 }
 
+export function getDashboardOptimization(options = {}, context = {}) {
+  enforcePermission(db, withPermissionContext(context, {
+    scopeType: 'module',
+    scopeId: 'dashboard',
+    requiredRole: 'Viewer'
+  }));
+
+  const periodDays = normalizeOptimizationPeriod(options.periodDays ?? options.period_days);
+  const windowStart = `-${Math.max(0, periodDays - 1)} days`;
+
+  const spendRow = db.prepare(`
+    SELECT
+      COALESCE(SUM(amount), 0) AS total_spend
+    FROM transactions
+    WHERE type = 'expense'
+      AND date(date) >= date('now', @windowStart)
+      AND date(date) <= date('now')
+  `).get({ windowStart });
+
+  const dueSoonRow = db.prepare(`
+    SELECT
+      COALESCE(SUM(amount), 0) AS due_soon_total
+    FROM bills
+    WHERE COALESCE(is_paid, 0) <> 1
+      AND date(next_due_date) >= date('now')
+      AND date(next_due_date) <= date('now', '+7 days')
+  `).get();
+
+  const debtLoadRow = db.prepare(`
+    SELECT
+      COALESCE(SUM(current_balance), 0) AS debt_load_total
+    FROM loans
+    WHERE COALESCE(current_balance, 0) > 0
+  `).get();
+
+  const categoryRows = db.prepare(`
+    SELECT
+      COALESCE(t.category_id, 'uncategorized') AS category_id,
+      COALESCE(c.name, 'Uncategorized') AS category_name,
+      COUNT(*) AS tx_count,
+      COALESCE(SUM(t.amount), 0) AS amount
+    FROM transactions t
+    LEFT JOIN categories c ON c.id = t.category_id
+    WHERE t.type = 'expense'
+      AND date(t.date) >= date('now', @windowStart)
+      AND date(t.date) <= date('now')
+    GROUP BY COALESCE(t.category_id, 'uncategorized'), COALESCE(c.name, 'Uncategorized')
+    HAVING amount > 0
+    ORDER BY amount DESC
+    LIMIT 10
+  `).all({ windowStart });
+
+  const debtRows = db.prepare(`
+    SELECT id, name, current_balance, interest_rate, payment_amount, due_status
+    FROM loans
+    WHERE COALESCE(current_balance, 0) > 0
+    ORDER BY current_balance DESC, interest_rate DESC
+    LIMIT 12
+  `).all();
+
+  const billRows = db.prepare(`
+    SELECT id, name, amount, next_due_date, is_paid
+    FROM bills
+    WHERE COALESCE(is_paid, 0) <> 1
+    ORDER BY date(next_due_date) ASC
+    LIMIT 20
+  `).all();
+
+  return buildDashboardOptimizationPayload({
+    asOf: new Date().toISOString(),
+    periodDays,
+    totalSpend: spendRow?.total_spend || 0,
+    billsDue7d: dueSoonRow?.due_soon_total || 0,
+    debtLoad: debtLoadRow?.debt_load_total || 0,
+    categories: categoryRows,
+    loans: debtRows,
+    bills: billRows
+  });
+}
+
 // -- Budgets --
 export function getBudgets() {
   const budgets = db.prepare(`
@@ -1408,6 +1685,10 @@ export function getBudgets() {
 }
 
 export function saveBudget(budget) {
+  const normalizedPeriod = ensureEnum(budget?.period, 'budget.period', ['weekly', 'monthly', 'yearly']);
+  const normalizedLimit = ensureNumber(budget?.limit_amount, 'budget.limit_amount', { min: 0 });
+  const normalizedCategoryId = ensureString(budget?.category_id, 'budget.category_id', { maxLength: 120 });
+
   // Upsert style
   const stmt = db.prepare(`
     INSERT INTO budgets (id, category_id, period, limit_amount)
@@ -1419,13 +1700,18 @@ export function saveBudget(budget) {
   `);
   stmt.run({
     id: budget.id,
-    categoryId: budget.category_id,
-    period: budget.period,
-    limitAmount: budget.limit_amount
+    categoryId: normalizedCategoryId,
+    period: normalizedPeriod,
+    limitAmount: normalizedLimit
   });
   markSettlementDirty(db, new Date().toISOString().slice(0, 7), `Budget ${budget.id} updated.`);
   refreshRealtimeState();
-  return budget;
+  return {
+    ...budget,
+    category_id: normalizedCategoryId,
+    period: normalizedPeriod,
+    limit_amount: normalizedLimit
+  };
 }
 
 export function deleteBudget(id) {
@@ -1440,6 +1726,24 @@ export function getGoals() {
 }
 
 export function saveGoal(goal) {
+  const resolvedTargetAmount = ensureNumber(goal?.target_amount, 'goal.target_amount', { min: 0 });
+  const resolvedCurrentAmount = ensureNumber(goal?.current_amount, 'goal.current_amount', {
+    required: false,
+    min: 0,
+    defaultValue: 0
+  });
+  const normalizedName = ensureString(goal?.name, 'goal.name', { maxLength: 200 });
+  const normalizedGoalType = ensureEnum(goal?.goal_type || 'standard', 'goal.goal_type', ['standard', 'sinking_fund', 'debt_payoff']);
+  const normalizedPriority = ensureEnum(goal?.priority || 'medium', 'goal.priority', ['low', 'medium', 'high']);
+  const normalizedRiskStatus = ensureEnum(goal?.risk_status || 'normal', 'goal.risk_status', ['normal', 'watch', 'at_risk', 'critical'], { fallback: 'normal' });
+  const normalizedTargetDate = ensureIsoDate(goal?.target_date, 'goal.target_date', { required: false, allowEmpty: true }) || null;
+  const normalizedFundingSource = ensureString(goal?.funding_source || '', 'goal.funding_source', {
+    required: false,
+    allowEmpty: true,
+    maxLength: 120
+  }) || null;
+  const normalizedLinkedAccountId = goal?.linked_account_id ? ensureString(goal.linked_account_id, 'goal.linked_account_id', { maxLength: 120 }) : null;
+
   const stmt = db.prepare(`
     INSERT INTO goals (id, name, target_amount, target_date, linked_account_id, current_amount, goal_type, priority, funding_source, risk_status, protected_pool)
     VALUES (@id, @name, @targetAmount, @targetDate, @linkedAccountId, @currentAmount, @goalType, @priority, @fundingSource, @riskStatus, @protectedPool)
@@ -1457,20 +1761,84 @@ export function saveGoal(goal) {
   `);
   stmt.run({
     id: goal.id,
-    name: goal.name,
-    targetAmount: goal.target_amount,
-    targetDate: goal.target_date,
-    linkedAccountId: goal.linked_account_id,
-    currentAmount: goal.current_amount || 0,
-    goalType: goal.goal_type || 'standard',
-    priority: goal.priority || 'medium',
-    fundingSource: goal.funding_source || null,
-    riskStatus: goal.risk_status || 'normal',
-    protectedPool: goal.protected_pool ? 1 : 0
+    name: normalizedName,
+    targetAmount: resolvedTargetAmount,
+    targetDate: normalizedTargetDate,
+    linkedAccountId: normalizedLinkedAccountId,
+    currentAmount: resolvedCurrentAmount,
+    goalType: normalizedGoalType,
+    priority: normalizedPriority,
+    fundingSource: normalizedFundingSource,
+    riskStatus: normalizedRiskStatus,
+    protectedPool: toBooleanFlag(goal.protected_pool)
   });
+
+  syncGoalManualSeed(goal.id, resolvedCurrentAmount, {
+    date: new Date().toISOString().slice(0, 10),
+    notes: 'Manual goal baseline synced from goal editor.'
+  });
+
   markSettlementDirty(db, new Date().toISOString().slice(0, 7), `Goal ${goal.id} updated.`);
   refreshRealtimeState();
-  return goal;
+  return db.prepare('SELECT * FROM goals WHERE id = ?').get(goal.id);
+}
+
+export function addGoalContribution(input = {}) {
+  const goalId = String(input.goalId || input.goal_id || '').trim();
+  if (!goalId) {
+    throw new Error('goalId is required.');
+  }
+
+  const goal = db.prepare('SELECT * FROM goals WHERE id = ?').get(goalId);
+  if (!goal) {
+    throw new Error(`Goal not found: ${goalId}`);
+  }
+  syncGoalManualSeed(goalId, sanitizeNumber(goal.current_amount, 0), {
+    notes: 'Auto baseline sync before manual contribution.'
+  });
+
+  const amount = sanitizeNumber(input.amount, Number.NaN);
+  if (!Number.isFinite(amount) || amount === 0) {
+    throw new Error('A non-zero amount is required.');
+  }
+
+  const contributionId = String(input.id || createAuditId('goal_contrib')).trim();
+  const contributionDate = String(input.date || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const sourceType = String(input.sourceType || input.source_type || 'manual').trim() || 'manual';
+  const sourceId = input.sourceId || input.source_id || null;
+  const notes = typeof input.notes === 'string' ? input.notes.trim() : '';
+
+  db.prepare(`
+    INSERT INTO goal_contributions (id, goal_id, transaction_id, amount, date, source_type, source_id, notes)
+    VALUES (@id, @goalId, @transactionId, @amount, @date, @sourceType, @sourceId, @notes)
+    ON CONFLICT(id) DO UPDATE SET
+      goal_id = @goalId,
+      transaction_id = @transactionId,
+      amount = @amount,
+      date = @date,
+      source_type = @sourceType,
+      source_id = @sourceId,
+      notes = @notes
+  `).run({
+    id: contributionId,
+    goalId,
+    transactionId: input.transactionId || input.transaction_id || null,
+    amount,
+    date: contributionDate,
+    sourceType,
+    sourceId,
+    notes
+  });
+
+  const updatedGoal = recalculateGoalCurrentAmount(goalId);
+  const month = getMonthFromDate(contributionDate) || new Date().toISOString().slice(0, 7);
+  markSettlementDirty(db, month, `Goal contribution ${contributionId} posted.`);
+  refreshRealtimeState();
+
+  return {
+    goal: updatedGoal,
+    contribution: db.prepare('SELECT * FROM goal_contributions WHERE id = ?').get(contributionId)
+  };
 }
 
 export function deleteGoal(id) {
@@ -1489,8 +1857,9 @@ export function getGoalContributions() {
     FROM goal_contributions gc
     LEFT JOIN goals g ON g.id = gc.goal_id
     LEFT JOIN transactions t ON t.id = gc.transaction_id
+    WHERE gc.source_type <> ?
     ORDER BY gc.date DESC
-  `).all();
+  `).all(GOAL_MANUAL_SEED_SOURCE);
 }
 
 // -- Bills --
@@ -1499,6 +1868,15 @@ export function getBills() {
 }
 
 export function saveBill(bill) {
+  const normalizedName = ensureString(bill?.name, 'bill.name', { maxLength: 160 });
+  const normalizedAmount = ensureNumber(bill?.amount, 'bill.amount', { min: 0 });
+  const normalizedDueDate = ensureIsoDate(bill?.next_due_date, 'bill.next_due_date');
+  const normalizedRecurrence = ensureString(bill?.recurrence || 'monthly', 'bill.recurrence', {
+    required: false,
+    maxLength: 32,
+    defaultValue: 'monthly'
+  }).toLowerCase();
+
   const stmt = db.prepare(`
     INSERT INTO bills (id, name, amount, next_due_date, recurrence, is_paid, auto_pay)
     VALUES (@id, @name, @amount, @nextDueDate, @recurrence, @isPaid, @autoPay)
@@ -1512,16 +1890,24 @@ export function saveBill(bill) {
   `);
   stmt.run({
     id: bill.id,
-    name: bill.name,
-    amount: bill.amount,
-    nextDueDate: bill.next_due_date,
-    recurrence: bill.recurrence,
-    isPaid: bill.is_paid ? 1 : 0,
-    autoPay: bill.auto_pay ? 1 : 0
+    name: normalizedName,
+    amount: normalizedAmount,
+    nextDueDate: normalizedDueDate,
+    recurrence: normalizedRecurrence,
+    isPaid: toBooleanFlag(bill.is_paid),
+    autoPay: toBooleanFlag(bill.auto_pay)
   });
   evaluateCashCollisionAlerts(db);
   refreshRealtimeState();
-  return bill;
+  return {
+    ...bill,
+    name: normalizedName,
+    amount: normalizedAmount,
+    next_due_date: normalizedDueDate,
+    recurrence: normalizedRecurrence,
+    is_paid: toBooleanFlag(bill.is_paid),
+    auto_pay: toBooleanFlag(bill.auto_pay)
+  };
 }
 
 export function deleteBill(id) {
@@ -1593,8 +1979,11 @@ export function payLoan(input = {}) {
 
   const paidAtRaw = input.paidAt || input.paid_at || new Date().toISOString();
   const paidAt = String(paidAtRaw).trim() || new Date().toISOString();
+  const paymentDate = paidAt.slice(0, 10);
+  assertMonthEditableForDate(db, paymentDate);
   const note = typeof input.note === 'string' ? input.note.trim() : null;
   const requestedAmount = sanitizeNumber(input.amount, 0);
+  const createLinkedTransaction = input.createLinkedTransaction !== false;
 
   const execute = db.transaction(() => {
     const loan = db.prepare('SELECT * FROM loans WHERE id = ?').get(loanId);
@@ -1645,16 +2034,53 @@ export function payLoan(input = {}) {
   });
 
   const result = execute();
+  let linkedTransaction = null;
+
+  if (createLinkedTransaction && result?.payment && result?.loan?.linked_account_id) {
+    try {
+      linkedTransaction = addTransaction({
+        id: `loan_tx_${result.payment.id}`,
+        accountId: result.loan.linked_account_id,
+        category: input.categoryId || input.category_id || null,
+        type: 'expense',
+        amount: result.payment.amount,
+        date: paymentDate,
+        merchant: `Loan payment - ${result.loan.name || loanId}`,
+        notes: note || `Loan payment entry linked to ${loanId}`,
+        tags: ['loan-payment']
+      });
+    } catch (error) {
+      safeError(`Unable to create linked transaction for loan payment ${loanId}:`, error?.message || error);
+    }
+  }
+
   evaluateCashCollisionAlerts(db);
-  markSettlementDirty(db, getMonthFromDate(paidAt) || new Date().toISOString().slice(0, 7), `Loan ${loanId} payment posted.`);
+  markSettlementDirty(db, getMonthFromDate(paymentDate) || new Date().toISOString().slice(0, 7), `Loan ${loanId} payment posted.`);
   refreshRealtimeState();
-  return result;
+  return {
+    ...result,
+    linkedTransaction
+  };
 }
 
 export function saveLoan(loan) {
+  const normalizedName = ensureString(loan?.name, 'loan.name', { maxLength: 180 });
+  const normalizedLender = ensureString(loan?.lender, 'loan.lender', { maxLength: 160 });
+  const normalizedPrincipal = ensureNumber(loan?.principal_amount, 'loan.principal_amount', { min: 0 });
+  const normalizedCurrent = ensureNumber(loan?.current_balance, 'loan.current_balance', { min: 0 });
+  const normalizedRate = ensureNumber(loan?.interest_rate, 'loan.interest_rate', { min: 0, max: 1000 });
+  const normalizedPayment = ensureNumber(loan?.payment_amount, 'loan.payment_amount', { min: 0 });
+  const normalizedFrequency = ensureEnum(loan?.payment_frequency || 'monthly', 'loan.payment_frequency', ['monthly', 'biweekly', 'weekly']);
+  const normalizedStartDate = ensureIsoDate(loan?.start_date, 'loan.start_date');
+  const normalizedEndDate = ensureIsoDate(loan?.end_date, 'loan.end_date', { required: false, allowEmpty: true }) || null;
+  const normalizedNextDueDate = ensureIsoDate(loan?.next_due_date || loan?.end_date, 'loan.next_due_date', { required: false, allowEmpty: true }) || normalizedEndDate;
+  const normalizedDueStatus = ensureEnum(loan?.due_status || 'upcoming', 'loan.due_status', ['upcoming', 'due_soon', 'overdue']);
+  const normalizedNotes = ensureString(loan?.notes || '', 'loan.notes', { required: false, allowEmpty: true, maxLength: 2000 }) || null;
+  const normalizedLinkedAccountId = loan?.linked_account_id ? ensureString(loan.linked_account_id, 'loan.linked_account_id', { maxLength: 120 }) : null;
+
   const stmt = db.prepare(`
-    INSERT INTO loans (id, name, principal_amount, current_balance, interest_rate, payment_amount, payment_frequency, start_date, end_date, lender, notes, next_due_date, due_status)
-    VALUES (@id, @name, @principalAmount, @currentBalance, @interestRate, @paymentAmount, @paymentFrequency, @startDate, @endDate, @lender, @notes, @nextDueDate, @dueStatus)
+    INSERT INTO loans (id, name, principal_amount, current_balance, interest_rate, payment_amount, payment_frequency, start_date, end_date, linked_account_id, lender, notes, next_due_date, due_status)
+    VALUES (@id, @name, @principalAmount, @currentBalance, @interestRate, @paymentAmount, @paymentFrequency, @startDate, @endDate, @linkedAccountId, @lender, @notes, @nextDueDate, @dueStatus)
     ON CONFLICT(id) DO UPDATE SET
       name = @name,
       principal_amount = @principalAmount,
@@ -1664,6 +2090,7 @@ export function saveLoan(loan) {
       payment_frequency = @paymentFrequency,
       start_date = @startDate,
       end_date = @endDate,
+      linked_account_id = @linkedAccountId,
       lender = @lender,
       notes = @notes,
       next_due_date = @nextDueDate,
@@ -1671,23 +2098,39 @@ export function saveLoan(loan) {
   `);
   stmt.run({
     id: loan.id,
-    name: loan.name,
-    principalAmount: loan.principal_amount,
-    currentBalance: loan.current_balance,
-    interestRate: loan.interest_rate,
-    paymentAmount: loan.payment_amount,
-    paymentFrequency: loan.payment_frequency,
-    startDate: loan.start_date,
-    endDate: loan.end_date,
-    lender: loan.lender,
-    notes: loan.notes || null,
-    nextDueDate: loan.next_due_date || loan.end_date || null,
-    dueStatus: loan.due_status || 'upcoming'
+    name: normalizedName,
+    principalAmount: normalizedPrincipal,
+    currentBalance: normalizedCurrent,
+    interestRate: normalizedRate,
+    paymentAmount: normalizedPayment,
+    paymentFrequency: normalizedFrequency,
+    startDate: normalizedStartDate,
+    endDate: normalizedEndDate,
+    linkedAccountId: normalizedLinkedAccountId,
+    lender: normalizedLender,
+    notes: normalizedNotes,
+    nextDueDate: normalizedNextDueDate,
+    dueStatus: normalizedDueStatus
   });
   evaluateCashCollisionAlerts(db);
   markSettlementDirty(db, new Date().toISOString().slice(0, 7), `Loan ${loan.id} updated.`);
   refreshRealtimeState();
-  return loan;
+  return {
+    ...loan,
+    name: normalizedName,
+    lender: normalizedLender,
+    principal_amount: normalizedPrincipal,
+    current_balance: normalizedCurrent,
+    interest_rate: normalizedRate,
+    payment_amount: normalizedPayment,
+    payment_frequency: normalizedFrequency,
+    start_date: normalizedStartDate,
+    end_date: normalizedEndDate,
+    linked_account_id: normalizedLinkedAccountId,
+    notes: normalizedNotes,
+    next_due_date: normalizedNextDueDate,
+    due_status: normalizedDueStatus
+  };
 }
 
 export function deleteLoan(id) {
@@ -2796,11 +3239,11 @@ export function restoreAllData(payload) {
 
     for (const l of loans) {
       db.prepare(`
-        INSERT INTO loans (id, name, principal_amount, current_balance, interest_rate, payment_amount, payment_frequency, start_date, end_date, lender, notes, next_due_date, due_status, created_at)
-        VALUES (@id, @name, @principal_amount, @current_balance, @interest_rate, @payment_amount, @payment_frequency, @start_date, @end_date, @lender, @notes, @next_due_date, @due_status, @created_at)
+        INSERT INTO loans (id, name, principal_amount, current_balance, interest_rate, payment_amount, payment_frequency, start_date, end_date, linked_account_id, lender, notes, next_due_date, due_status, created_at)
+        VALUES (@id, @name, @principal_amount, @current_balance, @interest_rate, @payment_amount, @payment_frequency, @start_date, @end_date, @linked_account_id, @lender, @notes, @next_due_date, @due_status, @created_at)
         ON CONFLICT(id) DO UPDATE SET
           name=@name, principal_amount=@principal_amount, current_balance=@current_balance, interest_rate=@interest_rate,
-          payment_amount=@payment_amount, payment_frequency=@payment_frequency, start_date=@start_date, end_date=@end_date, lender=@lender, notes=@notes, next_due_date=@next_due_date, due_status=@due_status, created_at=@created_at
+          payment_amount=@payment_amount, payment_frequency=@payment_frequency, start_date=@start_date, end_date=@end_date, linked_account_id=@linked_account_id, lender=@lender, notes=@notes, next_due_date=@next_due_date, due_status=@due_status, created_at=@created_at
       `).run(l);
     }
 
@@ -2958,4 +3401,75 @@ export function restoreAllData(payload) {
   initializeSchemaVersioning();
   ensureDefaultOwnerPermission(db);
   refreshRealtimeState();
+}
+
+const BACKUP_TABLE_MAP = [
+  ['accounts', 'accounts'],
+  ['categories', 'categories'],
+  ['subcategories', 'subcategories'],
+  ['tags', 'tags'],
+  ['labels', 'labels'],
+  ['classification_rules', 'classification_rules'],
+  ['transactions', 'transactions'],
+  ['transaction_tags', 'transaction_tags'],
+  ['transaction_labels', 'transaction_labels'],
+  ['budgets', 'budgets'],
+  ['goals', 'goals'],
+  ['goal_contributions', 'goal_contributions'],
+  ['bills', 'bills'],
+  ['loans', 'loans'],
+  ['loan_payments', 'loan_payments'],
+  ['realtime_state', 'realtime_state'],
+  ['metadata_entries', 'entity_metadata'],
+  ['plans', 'plans'],
+  ['recurring_items', 'recurring_items'],
+  ['scenarios', 'scenarios'],
+  ['alerts', 'alerts'],
+  ['alert_events', 'alert_events'],
+  ['monthly_settlements', 'monthly_settlements'],
+  ['settlement_events', 'settlement_events'],
+  ['monthly_reports', 'monthly_reports'],
+  ['report_exports', 'report_exports'],
+  ['permissions', 'permissions'],
+  ['share_snapshots', 'share_snapshots'],
+  ['tax_rules', 'tax_rules'],
+  ['app_settings', 'app_settings']
+];
+
+const buildBackupPayloadSnapshot = () => {
+  const payload = {};
+  for (const [payloadKey, tableName] of BACKUP_TABLE_MAP) {
+    payload[payloadKey] = db.prepare(`SELECT * FROM ${tableName}`).all();
+  }
+  return JSON.parse(JSON.stringify(payload));
+};
+
+export function replaceAllData(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error('A valid restore payload object is required.');
+  }
+
+  const backupBeforeReplace = buildBackupPayloadSnapshot();
+
+  try {
+    resetAllData();
+    restoreAllData(payload);
+    return {
+      replaced: true,
+      rollbackApplied: false
+    };
+  } catch (error) {
+    safeError('replaceAllData failed. Attempting automatic rollback:', error);
+    try {
+      resetAllData();
+      restoreAllData(backupBeforeReplace);
+      throw new Error(
+        `Restore failed and was rolled back to the previous state. Reason: ${error?.message || 'unknown error'}`
+      );
+    } catch (rollbackError) {
+      throw new Error(
+        `Restore failed and automatic rollback failed: ${rollbackError?.message || 'unknown rollback error'}`
+      );
+    }
+  }
 }

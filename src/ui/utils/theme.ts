@@ -1,13 +1,14 @@
-export type ThemeKey = 'dark';
+export type ThemeKey = 'light' | 'dark';
 
 export const resolveTheme = (rawTheme: string | null): ThemeKey => {
   const normalizedTheme = String(rawTheme || '').trim().toLowerCase();
-  return normalizedTheme === 'dark' ? 'dark' : 'dark';
+  return normalizedTheme === 'dark' ? 'dark' : 'light';
 };
 
 export const applyTheme = (themeInput: ThemeKey | string | null) => {
-  const _resolved = resolveTheme(themeInput);
+  const resolved = resolveTheme(themeInput);
   const classList = document.body.classList;
+  classList.remove('light-theme', 'dark-theme');
   classList.remove(
     'default-theme',
     'female-theme',
@@ -20,5 +21,5 @@ export const applyTheme = (themeInput: ThemeKey | string | null) => {
     'nature-theme',
     'royal-theme'
   );
-  classList.add(`${_resolved}-theme`);
+  classList.add(`${resolved}-theme`);
 };

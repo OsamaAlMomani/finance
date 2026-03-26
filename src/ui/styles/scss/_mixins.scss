@@ -1,0 +1,52 @@
+@mixin gray-text-scope($scope, $muted-selectors, $strong-selectors) {
+  @each $selector in $muted-selectors {
+    #{$scope} #{$selector} {
+      color: var(--pencil-gray) !important;
+    }
+  }
+
+  @each $selector in $strong-selectors {
+    #{$scope} #{$selector} {
+      color: var(--ink-black) !important;
+    }
+  }
+}
+
+@mixin scoped-background($scope, $selectors, $value) {
+  @each $selector in $selectors {
+    #{$scope} #{$selector} {
+      background: #{$value} !important;
+    }
+  }
+}
+
+@mixin scoped-border-color($scope, $selectors, $value) {
+  @each $selector in $selectors {
+    #{$scope} #{$selector} {
+      border-color: #{$value} !important;
+    }
+  }
+}
+
+@mixin scoped-fill($scope, $selectors, $value) {
+  @each $selector in $selectors {
+    #{$scope} #{$selector} {
+      fill: #{$value} !important;
+    }
+  }
+}
+
+@mixin spotlight-tone($tone-var, $mix-percent) {
+  border-color: color-mix(in srgb, var(#{$tone-var}) #{$mix-percent}, transparent);
+
+  .spotlight-top,
+  .spotlight-delta {
+    color: var(#{$tone-var});
+  }
+}
+
+@mixin status-dot($bg, $border) {
+  background: #{$bg};
+  border-color: #{$border};
+}
+

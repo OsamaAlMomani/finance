@@ -1,9 +1,7 @@
 import en from './en';
-import ar from './ar';
 
-export type Language = 'en' | 'ar';
+export type Language = 'en';
 
 export const translations: Record<Language, Record<string, string>> = {
-  en,
-  ar
+  en
 };

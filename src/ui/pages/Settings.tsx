@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Trash2, PlusCircle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { CATEGORY_COLOR_OPTIONS, getCategoryColorClass } from '../utils/categoryColor';
@@ -16,6 +16,7 @@ import { AvatarPicker } from '../components/AvatarPicker';
 import { getDefaultAvatar } from '../utils/avatars';
 import { useI18n } from '../contexts/useI18n';
 import { LanguageSwitch } from '../components/LanguageSwitch';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 type LabSelectorMode = 'id' | 'name' | 'class' | 'custom';
 type LabStyleMode = 'text' | 'background' | 'border' | 'all';
@@ -63,7 +64,11 @@ export const Settings = () => {
     if (!raw) return defaults;
     try {
       const parsed = JSON.parse(raw);
-      return { ...defaults, ...parsed };
+      const merged = { ...defaults, ...parsed };
+      if (!['en-US', 'en-GB'].includes(merged.locale)) {
+        merged.locale = 'en-US';
+      }
+      return merged;
     } catch {
       return defaults;
     }
@@ -79,18 +84,25 @@ export const Settings = () => {
   const [labStyleColor, setLabStyleColor] = useState('#8f9bab');
   const [labTestSummary, setLabTestSummary] = useState('');
   const [labTestSelectors, setLabTestSelectors] = useState<LabCssSelectorResult[]>([]);
+  const [pendingDeleteCategoryId, setPendingDeleteCategoryId] = useState<string | null>(null);
 
   const saveSettings = (next: typeof settings) => {
     setSettings(next);
     localStorage.setItem('appSettings', JSON.stringify(next));
   };
 
-  const refreshCategories = async () => {
+  const refreshCategories = useCallback(async () => {
     if (window.electron) {
       const cats = await window.electron.invoke('db-get-categories');
       setCategories(cats);
     }
-  };
+  }, []);
+
+  const refreshAccounts = useCallback(async () => {
+    if (!window.electron) return;
+    const accs = await window.electron.invoke('db-get-accounts');
+    setAccounts(accs);
+  }, []);
 
   useEffect(() => {
     if (!window.electron) return;
@@ -122,11 +134,20 @@ export const Settings = () => {
       setLabTestSummary('');
       setLabTestSelectors([]);
     });
-  }, []);
+  }, [refreshAccounts, refreshCategories]);
 
   useEffect(() => {
-    localStorage.setItem('theme', 'dark');
-    applyTheme('dark');
+    const onDataChanged = () => {
+      void refreshCategories();
+      void refreshAccounts();
+    };
+    window.addEventListener('finance:data-changed', onDataChanged);
+    return () => window.removeEventListener('finance:data-changed', onDataChanged);
+  }, [refreshAccounts, refreshCategories]);
+
+  useEffect(() => {
+    localStorage.setItem('theme', 'light');
+    applyTheme('light');
   }, []);
 
   const handleLabCssChange = (value: string) => {
@@ -257,7 +278,13 @@ export const Settings = () => {
   };
 
   const handleDeleteCategory = async (id: string) => {
-    if (!confirm(t('settings.categoryDeleteConfirm'))) return;
+    setPendingDeleteCategoryId(id);
+  };
+
+  const confirmDeleteCategory = async () => {
+    const id = pendingDeleteCategoryId;
+    if (!id) return;
+    setPendingDeleteCategoryId(null);
     if (!window.electron) return;
     await window.electron.invoke('db-delete-category', id);
     refreshCategories();
@@ -280,7 +307,7 @@ export const Settings = () => {
               className="btn theme-select-btn active"
               disabled
             >
-              {t('settings.theme.dark')}
+              {t('settings.theme.light')}
             </button>
           </div>
         </div>
@@ -445,8 +472,6 @@ export const Settings = () => {
               >
                 <option value="en-US">{t('settings.locale.enUS')}</option>
                 <option value="en-GB">{t('settings.locale.enGB')}</option>
-                <option value="ar-JO">{t('settings.locale.arJO')}</option>
-                <option value="ar-SA">{t('settings.locale.arSA')}</option>
               </select>
             </div>
             <div>
@@ -619,6 +644,17 @@ export const Settings = () => {
             </div>
           )}
         </div>
+
+        <ConfirmDialog
+          open={Boolean(pendingDeleteCategoryId)}
+          title={t('common.delete')}
+          message={t('settings.categoryDeleteConfirm')}
+          destructive
+          onCancel={() => setPendingDeleteCategoryId(null)}
+          onConfirm={() => {
+            void confirmDeleteCategory();
+          }}
+        />
       </div>
     </div>
   );

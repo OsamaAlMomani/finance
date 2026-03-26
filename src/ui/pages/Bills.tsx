@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Calendar, CheckCircle, Clock, AlertCircle, Trash2, Edit2 } from 'lucide-react';
 import { useI18n } from '../contexts/useI18n';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 interface Bill {
   id: string;
@@ -18,15 +19,23 @@ export const BillsPage = () => {
     const [bills, setBills] = useState<Bill[]>([]);
     const [showModal, setShowModal] = useState(false);
     const [editingBill, setEditingBill] = useState<Bill | null>(null);
+    const [pendingDeleteBillId, setPendingDeleteBillId] = useState<string | null>(null);
+    const [formError, setFormError] = useState('');
     const [newBill, setNewBill] = useState({
         name: '', amount: '', date: '', recur: 'monthly'
     });
 
-    const loadBills = () => {
+    const loadBills = useCallback(() => {
         if(window.electron) window.electron.invoke('db-get-bills').then(setBills);
-    };
+    }, []);
 
-    useEffect(() => { loadBills(); }, []);
+    useEffect(() => { loadBills(); }, [loadBills]);
+
+    useEffect(() => {
+        const onChanged = () => loadBills();
+        window.addEventListener('finance:data-changed', onChanged);
+        return () => window.removeEventListener('finance:data-changed', onChanged);
+    }, [loadBills]);
 
     const handleOpenModal = (bill?: Bill) => {
         if (bill) {
@@ -41,23 +50,36 @@ export const BillsPage = () => {
             setEditingBill(null);
             setNewBill({ name: '', amount: '', date: '', recur: 'monthly' });
         }
+        setFormError('');
         setShowModal(true);
     };
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         if(!window.electron) return;
-        await window.electron.invoke('db-save-bill', {
-            id: editingBill ? editingBill.id : uuidv4(),
-            name: newBill.name,
-            amount: parseFloat(newBill.amount),
-            next_due_date: newBill.date,
-            recurrence: newBill.recur,
-            is_paid: editingBill ? editingBill.is_paid : false,
-            auto_pay: editingBill ? editingBill.auto_pay : false
-        });
-        setShowModal(false);
-        loadBills();
+
+        const amount = Number.parseFloat(newBill.amount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            setFormError(t('import.errors.invalidNumber', { field: t('bills.amount') }));
+            return;
+        }
+
+        try {
+            await window.electron.invoke('db-save-bill', {
+                id: editingBill ? editingBill.id : uuidv4(),
+                name: newBill.name.trim(),
+                amount,
+                next_due_date: newBill.date,
+                recurrence: newBill.recur,
+                is_paid: editingBill ? editingBill.is_paid : false,
+                auto_pay: editingBill ? editingBill.auto_pay : false
+            });
+            setFormError('');
+            setShowModal(false);
+            loadBills();
+        } catch (error) {
+            setFormError(error instanceof Error ? error.message : t('import.errors.unknown'));
+        }
     };
 
     const togglePaid = async (bill: Bill) => {
@@ -70,14 +92,20 @@ export const BillsPage = () => {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm(t('bills.deleteConfirm'))) return;
+        setPendingDeleteBillId(id);
+    };
+
+    const confirmDeleteBill = async () => {
+        const id = pendingDeleteBillId;
+        if (!id) return;
+        setPendingDeleteBillId(null);
         if (!window.electron) return;
         await window.electron.invoke('db-delete-bill', id);
         loadBills();
     };
 
     return (
-        <div className="h-full flex flex-col overflow-hidden">
+        <div className="h-full min-h-0 flex flex-col overflow-hidden">
              <div className="flex justify-between items-center mb-6">
                 <h2 className="text-3xl font-bold font-heading">{t('bills.title')}</h2>
                 <button onClick={() => handleOpenModal()} className="btn bg-red-400 text-white flex items-center gap-2">
@@ -136,6 +164,9 @@ export const BillsPage = () => {
                             {editingBill ? t('bills.edit') : t('bills.addTitle')}
                         </h3>
                         <form onSubmit={handleSave} className="space-y-3">
+                             {formError && (
+                                <p className="text-sm text-red-600 font-semibold" role="alert">{formError}</p>
+                             )}
                              <label htmlFor="bill-name" className="block text-sm font-bold mb-1">{t('bills.billName')}</label>
                              <input 
                                 id="bill-name"
@@ -186,6 +217,17 @@ export const BillsPage = () => {
                     </div>
                 </div>
             )}
+
+            <ConfirmDialog
+                open={Boolean(pendingDeleteBillId)}
+                title={t('common.delete')}
+                message={t('bills.deleteConfirm')}
+                destructive
+                onCancel={() => setPendingDeleteBillId(null)}
+                onConfirm={() => {
+                    void confirmDeleteBill();
+                }}
+            />
         </div>
     );
 };

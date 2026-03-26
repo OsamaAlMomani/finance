@@ -12,11 +12,10 @@ export const LanguageSwitch = ({ labelClassName }: { labelClassName?: string }) 
         id="settings-language"
         className="w-full p-2 border rounded"
         value={language}
-        onChange={e => setLanguage(e.target.value as 'en' | 'ar')}
+        onChange={e => setLanguage(e.target.value as 'en')}
         title={t('settings.languageLabel')}
       >
         <option value="en">{t('language.english')}</option>
-        <option value="ar">{t('language.arabic')}</option>
       </select>
     </div>
   );

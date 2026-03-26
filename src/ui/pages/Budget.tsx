@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { PlusCircle, Wallet, Trash2, Edit2 } from 'lucide-react';
 import { getCategoryColorClass } from '../utils/categoryColor';
 import { useI18n } from '../contexts/useI18n';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 interface Budget {
   id: string;
@@ -48,6 +49,7 @@ export const BudgetPage = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
+  const [pendingDeleteBudgetId, setPendingDeleteBudgetId] = useState<string | null>(null);
 
   const [newBudget, setNewBudget] = useState({
     categoryId: '',
@@ -123,7 +125,13 @@ export const BudgetPage = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('budget.deleteConfirm'))) return;
+    setPendingDeleteBudgetId(id);
+  };
+
+  const confirmDeleteBudget = async () => {
+    const id = pendingDeleteBudgetId;
+    if (!id) return;
+    setPendingDeleteBudgetId(null);
     if (!window.electron) return;
     await window.electron.invoke('db-delete-budget', id);
     window.dispatchEvent(new CustomEvent('finance:data-changed'));
@@ -133,7 +141,7 @@ export const BudgetPage = () => {
   if (loading) return <div>{t('budget.loading')}</div>;
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-full min-h-0 flex flex-col overflow-hidden">
        <div className="flex justify-between items-center mb-6">
         <h2 className="text-3xl font-bold font-heading">{t('budget.title')}</h2>
         <button onClick={() => handleOpenModal()} className="btn bg-green-500 text-white flex items-center gap-2">
@@ -295,6 +303,17 @@ export const BudgetPage = () => {
             </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteBudgetId)}
+        title={t('common.delete')}
+        message={t('budget.deleteConfirm')}
+        destructive
+        onCancel={() => setPendingDeleteBudgetId(null)}
+        onConfirm={() => {
+          void confirmDeleteBudget();
+        }}
+      />
     </div>
   );
 };

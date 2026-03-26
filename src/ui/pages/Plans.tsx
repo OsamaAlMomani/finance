@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { PlusCircle, Trash2, Edit2 } from 'lucide-react';
 import { useI18n } from '../contexts/useI18n';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { onFinanceDataChanged } from '../services/dataEvents';
 
 type PlanItemType = 'transaction' | 'loan' | 'goal';
 
@@ -45,6 +47,7 @@ export const PlansPage = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
+  const [pendingDeletePlanId, setPendingDeletePlanId] = useState<string | null>(null);
 
   const [planForm, setPlanForm] = useState<Plan>({
     id: '',
@@ -58,11 +61,7 @@ export const PlansPage = () => {
     months_overdue: 0
   });
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!window.electron) return;
     try {
       const [plansData, txs, loansData, goalsData] = await Promise.all([
@@ -80,7 +79,18 @@ export const PlansPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    const off = onFinanceDataChanged(() => {
+      void loadData();
+    });
+    return off;
+  }, [loadData]);
 
   const getItemOptions = () => {
     if (planForm.item_type === 'transaction') return transactions;
@@ -161,23 +171,29 @@ export const PlansPage = () => {
 
     await window.electron.invoke('db-save-plan', planForm);
     setShowModal(false);
-    loadData();
+    void loadData();
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('plans.deleteConfirm'))) return;
-    if (!window.electron) return;
-    await window.electron.invoke('db-delete-plan', id);
-    loadData();
+    setPendingDeletePlanId(id);
   };
 
-  if (loading) return <div>{t('common.loading')}</div>;
+  const confirmDeletePlan = async () => {
+    const id = pendingDeletePlanId;
+    if (!id) return;
+    setPendingDeletePlanId(null);
+    if (!window.electron) return;
+    await window.electron.invoke('db-delete-plan', id);
+    void loadData();
+  };
+
+  if (loading) return <div className="card text-ink">{t('common.loading')}</div>;
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex justify-between items-center mb-6">
+    <div className="ui-page-shell overflow-hidden">
+      <div className="ui-page-header">
         <h2 className="text-3xl font-bold font-heading">{t('plans.title')}</h2>
-        <button onClick={() => handleOpenModal()} className="btn bg-indigo-500 text-white flex items-center gap-2">
+        <button onClick={() => handleOpenModal()} className="btn flex items-center gap-2">
           <PlusCircle size={20} /> {t('plans.create')}
         </button>
       </div>
@@ -188,15 +204,15 @@ export const PlansPage = () => {
             <div className="flex justify-between items-start mb-3">
               <div>
                 <h3 className="font-bold text-xl">{plan.title}</h3>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-muted">
                   {t('plans.typeLabel')}: {plan.item_type} • {t('plans.itemId')}: {plan.item_id}
                 </p>
-                <p className="text-xs text-gray-400">{t('plans.planId')}: {plan.id}</p>
+                <p className="text-xs text-muted">{t('plans.planId')}: {plan.id}</p>
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={() => handleOpenModal(plan)}
-                  className="text-blue-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="text-theme-primary hover:text-theme-primary-dark opacity-0 group-hover:opacity-100 transition-opacity"
                   aria-label={`${t('common.edit')} ${plan.title}`}
                   title={t('common.edit')}
                 >
@@ -204,7 +220,7 @@ export const PlansPage = () => {
                 </button>
                 <button
                   onClick={() => handleDelete(plan.id)}
-                  className="text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="text-theme-error hover:text-theme-error-dark opacity-0 group-hover:opacity-100 transition-opacity"
                   aria-label={`${t('common.delete')} ${plan.title}`}
                   title={t('common.delete')}
                 >
@@ -213,7 +229,7 @@ export const PlansPage = () => {
               </div>
             </div>
 
-            <div className="text-sm text-gray-700 space-y-2">
+            <div className="text-sm text-ink space-y-2">
               {plan.scenario_if && (
                 <div>
                   <span className="font-bold">{t('plans.scenarioIf')}</span>
@@ -287,16 +303,16 @@ export const PlansPage = () => {
         ))}
 
         {plans.length === 0 && (
-          <div className="col-span-2 text-center py-12 text-gray-400 border-2 border-dashed border-gray-300 rounded-xl">
+          <div className="col-span-2 ui-empty-state">
             <p className="text-xl font-hand">{t('plans.empty')}</p>
           </div>
         )}
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-2xl border-2 border-gray-200 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-2xl font-bold mb-4 font-heading">
+        <div className="app-modal-backdrop" role="presentation" onClick={() => setShowModal(false)}>
+          <div className="app-modal-card w-full max-w-2xl" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <h3 className="app-modal-title text-2xl font-heading">
               {editingPlan ? t('plans.edit') : t('plans.createTitle')}
             </h3>
             <form onSubmit={handleSave} className="space-y-4">
@@ -305,7 +321,7 @@ export const PlansPage = () => {
                 <div className="flex gap-2">
                   <input
                     id="plan-id"
-                    className="w-full p-2 border rounded font-hand text-lg"
+                    className="ui-field ui-field-lg font-hand"
                     value={planForm.id}
                     onChange={e => setPlanForm({ ...planForm, id: e.target.value })}
                     required
@@ -314,7 +330,7 @@ export const PlansPage = () => {
                     <button
                       type="button"
                       onClick={() => setPlanForm({ ...planForm, id: uuidv4() })}
-                      className="btn bg-gray-100"
+                      className="ui-btn-surface"
                     >
                       {t('common.generate')}
                     </button>
@@ -327,7 +343,7 @@ export const PlansPage = () => {
                   <label htmlFor="plan-type" className="block text-sm font-bold mb-1">{t('plans.planType')}</label>
                   <select
                     id="plan-type"
-                    className="w-full p-2 border rounded font-hand text-lg"
+                    className="ui-field ui-field-lg font-hand"
                     value={planForm.item_type}
                     onChange={e => {
                       const nextType = e.target.value as PlanItemType;
@@ -348,7 +364,7 @@ export const PlansPage = () => {
                   <label htmlFor="plan-item" className="block text-sm font-bold mb-1">{t('plans.item')}</label>
                   <select
                     id="plan-item"
-                    className="w-full p-2 border rounded font-hand text-lg"
+                    className="ui-field ui-field-lg font-hand"
                     value={planForm.item_id}
                     onChange={e => setPlanForm({ ...planForm, item_id: e.target.value })}
                     required
@@ -357,7 +373,7 @@ export const PlansPage = () => {
                       <option key={item.id} value={item.id}>{formatItemLabel(item)}</option>
                     ))}
                   </select>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-muted mt-1">
                     {t('plans.selectedItemId', { id: planForm.item_id || t('common.notAvailable') })}
                   </p>
                 </div>
@@ -367,7 +383,7 @@ export const PlansPage = () => {
                 <label htmlFor="plan-title" className="block text-sm font-bold mb-1">{t('plans.titleLabel')}</label>
                 <input
                   id="plan-title"
-                  className="w-full p-2 border rounded font-hand text-lg"
+                  className="ui-field ui-field-lg font-hand"
                   placeholder={t('plans.titlePlaceholder')}
                   required
                   value={planForm.title}
@@ -379,7 +395,7 @@ export const PlansPage = () => {
                 <label htmlFor="plan-if" className="block text-sm font-bold mb-1">{t('plans.ifLabel')}</label>
                 <textarea
                   id="plan-if"
-                  className="w-full p-2 border rounded font-hand text-lg"
+                  className="ui-field ui-field-lg font-hand"
                   rows={2}
                   value={planForm.scenario_if}
                   onChange={e => setPlanForm({ ...planForm, scenario_if: e.target.value })}
@@ -390,7 +406,7 @@ export const PlansPage = () => {
                 <label htmlFor="plan-else" className="block text-sm font-bold mb-1">{t('plans.elseLabel')}</label>
                 <textarea
                   id="plan-else"
-                  className="w-full p-2 border rounded font-hand text-lg"
+                  className="ui-field ui-field-lg font-hand"
                   rows={2}
                   value={planForm.scenario_else}
                   onChange={e => setPlanForm({ ...planForm, scenario_else: e.target.value })}
@@ -401,7 +417,7 @@ export const PlansPage = () => {
                 <label htmlFor="plan-whatif" className="block text-sm font-bold mb-1">{t('plans.whatIfLabel')}</label>
                 <textarea
                   id="plan-whatif"
-                  className="w-full p-2 border rounded font-hand text-lg"
+                  className="ui-field ui-field-lg font-hand"
                   rows={2}
                   value={planForm.what_if}
                   onChange={e => setPlanForm({ ...planForm, what_if: e.target.value })}
@@ -412,7 +428,7 @@ export const PlansPage = () => {
                 <label htmlFor="plan-outcome" className="block text-sm font-bold mb-1">{t('plans.outcomeLabel')}</label>
                 <textarea
                   id="plan-outcome"
-                  className="w-full p-2 border rounded font-hand text-lg"
+                  className="ui-field ui-field-lg font-hand"
                   rows={2}
                   value={planForm.outcome}
                   onChange={e => setPlanForm({ ...planForm, outcome: e.target.value })}
@@ -425,18 +441,18 @@ export const PlansPage = () => {
                   id="plan-months"
                   type="number"
                   min={0}
-                  className="w-full p-2 border rounded font-hand text-lg"
+                  className="ui-field ui-field-lg font-hand"
                   value={planForm.months_overdue || 0}
                   onChange={e => setPlanForm({ ...planForm, months_overdue: Number(e.target.value) })}
                 />
-                <p className="text-xs text-gray-500 mt-1">{t('plans.timelineHint')}</p>
+                <p className="text-xs text-muted mt-1">{t('plans.timelineHint')}</p>
               </div>
 
-              <div className="flex gap-4 pt-4">
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 btn bg-gray-100">
+              <div className="app-modal-actions">
+                <button type="button" onClick={() => setShowModal(false)} className="btn app-modal-btn-secondary">
                   {t('common.cancel')}
                 </button>
-                <button type="submit" className="flex-1 btn bg-indigo-500 text-white">
+                <button type="submit" className="btn app-modal-btn-primary">
                   {editingPlan ? t('plans.update') : t('plans.createTitle')}
                 </button>
               </div>
@@ -444,6 +460,17 @@ export const PlansPage = () => {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(pendingDeletePlanId)}
+        title={t('common.delete')}
+        message={t('plans.deleteConfirm')}
+        destructive
+        onCancel={() => setPendingDeletePlanId(null)}
+        onConfirm={() => {
+          void confirmDeletePlan();
+        }}
+      />
     </div>
   );
 };

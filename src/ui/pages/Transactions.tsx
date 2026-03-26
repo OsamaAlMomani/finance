@@ -1,8 +1,9 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { PlusCircle, Search, Filter, Trash2, Edit2, X, Tag, ChevronDown, ChevronUp, Minimize2, Maximize2 } from 'lucide-react';
 import { getCategoryColorClass } from '../utils/categoryColor';
 import { useI18n } from '../contexts/useI18n';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 // ---------- Types ----------
 interface Transaction {
@@ -18,6 +19,7 @@ interface Transaction {
   account_name: string;
   to_account_id?: string;
   to_account_name?: string;
+  goal_id?: string;
   type: 'income' | 'expense' | 'transfer';
   tags?: string[];
 }
@@ -33,6 +35,13 @@ interface Account {
   name: string;
 }
 
+interface Goal {
+  id: string;
+  name: string;
+  current_amount?: number;
+  target_amount?: number;
+}
+
 type TransactionType = Transaction['type'];
 
 interface TransactionFormState {
@@ -42,6 +51,7 @@ interface TransactionFormState {
   category: string;
   account: string;
   toAccount: string;
+  goalId: string;
   type: TransactionType;
   notes: string;
   tags: string;
@@ -57,6 +67,7 @@ interface TransactionSavePayload {
   category: string;
   accountId: string;
   toAccountId: string | null;
+  goalId: string | null;
   type: TransactionType;
 }
 
@@ -123,7 +134,7 @@ const FilterPanel = ({
           </label>
           <select
             id="filter-account"
-            className="w-full p-2 border-theme rounded bg-theme-surface text-ink"
+            className="ui-field"
             value={filterAccount}
             onChange={(e) => setFilterAccount(e.target.value)}
           >
@@ -141,7 +152,7 @@ const FilterPanel = ({
           </label>
           <select
             id="filter-type"
-            className="w-full p-2 border-theme rounded bg-theme-surface text-ink"
+            className="ui-field"
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
           >
@@ -158,7 +169,7 @@ const FilterPanel = ({
           <input
             id="filter-start-date"
             type="date"
-            className="w-full p-2 border-theme rounded bg-theme-surface text-ink"
+            className="ui-field"
             value={filterStartDate}
             onChange={(e) => setFilterStartDate(e.target.value)}
           />
@@ -170,7 +181,7 @@ const FilterPanel = ({
           <input
             id="filter-end-date"
             type="date"
-            className="w-full p-2 border-theme rounded bg-theme-surface text-ink"
+            className="ui-field"
             value={filterEndDate}
             onChange={(e) => setFilterEndDate(e.target.value)}
           />
@@ -302,6 +313,7 @@ const buildInitialForm = (
       category: editingTx.category_id,
       account: editingTx.account_id,
       toAccount: editingTx.to_account_id || '',
+      goalId: editingTx.goal_id || '',
       type: editingTx.type,
       notes: editingTx.notes || '',
       tags: editingTx.tags ? joinTags(editingTx.tags) : ''
@@ -319,6 +331,7 @@ const buildInitialForm = (
     category: defaultCategory,
     account: defaultAccount,
     toAccount: '',
+    goalId: '',
     type: defaultType,
     notes: '',
     tags: ''
@@ -330,6 +343,7 @@ const TransactionModal = ({
   editingTx,
   accounts,
   categories,
+  goals,
   onSave,
   merchantSuggestions,
 }: {
@@ -337,6 +351,7 @@ const TransactionModal = ({
   editingTx: Transaction | null;
   accounts: Account[];
   categories: Category[];
+  goals: Goal[];
   onSave: (txData: TransactionSavePayload) => Promise<void>;
   merchantSuggestions: string[]; // list of past merchants for autocomplete
 }) => {
@@ -359,6 +374,7 @@ const TransactionModal = ({
       category: form.category,
       accountId: form.account,
       toAccountId: form.type === 'transfer' ? form.toAccount : null,
+      goalId: form.goalId || null,
       type: form.type,
     };
 
@@ -381,7 +397,7 @@ const TransactionModal = ({
               </label>
               <select
                 id="tx-type"
-                className="w-full p-2 border-theme rounded bg-theme-surface text-ink font-hand text-lg"
+                className="ui-field ui-field-lg font-hand"
                 value={form.type}
                 onChange={(e) => {
                   const newType = e.target.value as TransactionType;
@@ -402,7 +418,7 @@ const TransactionModal = ({
                 id="tx-date"
                 type="date"
                 required
-                className="w-full p-2 border-theme rounded bg-theme-surface text-ink font-hand text-lg"
+                className="ui-field ui-field-lg font-hand"
                 value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}
               />
@@ -419,7 +435,7 @@ const TransactionModal = ({
               step="0.01"
               required
               placeholder={t('transactions.amountPlaceholder')}
-              className="w-full p-2 border-theme rounded bg-theme-surface text-ink font-hand text-xl"
+              className="ui-field font-hand text-xl"
               value={form.amount}
               onChange={(e) => setForm({ ...form, amount: e.target.value })}
             />
@@ -434,7 +450,7 @@ const TransactionModal = ({
               type="text"
               required
               list="merchant-suggestions"
-              className="w-full p-2 border-theme rounded bg-theme-surface text-ink font-hand text-lg"
+              className="ui-field ui-field-lg font-hand"
               placeholder={t('transactions.merchantPlaceholder')}
               value={form.merchant}
               onChange={(e) => setForm({ ...form, merchant: e.target.value })}
@@ -466,7 +482,7 @@ const TransactionModal = ({
                 <input
                   id="tx-tags"
                   type="text"
-                  className="w-full p-2 border-theme rounded bg-theme-surface text-ink font-hand text-lg"
+                  className="ui-field ui-field-lg font-hand"
                   placeholder={t('transactions.tagsPlaceholder')}
                   value={form.tags}
                   onChange={(e) => setForm({ ...form, tags: e.target.value })}
@@ -480,7 +496,7 @@ const TransactionModal = ({
                   </label>
                   <select
                     id="tx-category"
-                    className="w-full p-2 border-theme rounded bg-theme-surface text-ink font-hand text-lg"
+                    className="ui-field ui-field-lg font-hand"
                     value={form.category}
                     onChange={(e) => setForm({ ...form, category: e.target.value })}
                   >
@@ -495,13 +511,34 @@ const TransactionModal = ({
                 </div>
               )}
 
+              {form.type !== 'transfer' && (
+                <div>
+                  <label htmlFor="tx-goal" className="block text-sm font-bold mb-1 text-ink">
+                    Goal Link
+                  </label>
+                  <select
+                    id="tx-goal"
+                    className="ui-field ui-field-lg font-hand"
+                    value={form.goalId}
+                    onChange={(e) => setForm({ ...form, goalId: e.target.value })}
+                  >
+                    <option value="">No linked goal</option>
+                    {goals.map((goal) => (
+                      <option key={goal.id} value={goal.id}>
+                        {goal.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label htmlFor="tx-account" className="block text-sm font-bold mb-1 text-ink">
                   {form.type === 'transfer' ? t('transactions.fromAccount') : t('common.account')}
                 </label>
                 <select
                   id="tx-account"
-                  className="w-full p-2 border-theme rounded bg-theme-surface text-ink font-hand text-lg"
+                  className="ui-field ui-field-lg font-hand"
                   value={form.account}
                   onChange={(e) => setForm({ ...form, account: e.target.value })}
                 >
@@ -521,7 +558,7 @@ const TransactionModal = ({
                   </label>
                   <select
                     id="tx-to-account"
-                    className="w-full p-2 border-theme rounded bg-theme-surface text-ink font-hand text-lg"
+                    className="ui-field ui-field-lg font-hand"
                     value={form.toAccount}
                     onChange={(e) => setForm({ ...form, toAccount: e.target.value })}
                     required
@@ -544,7 +581,7 @@ const TransactionModal = ({
                 </label>
                 <textarea
                   id="tx-notes"
-                  className="w-full p-2 border-theme rounded bg-theme-surface text-ink font-hand text-lg"
+                  className="ui-field ui-field-lg font-hand"
                   rows={2}
                   placeholder={t('transactions.notesPlaceholder')}
                   value={form.notes}
@@ -575,6 +612,7 @@ export const Transactions = () => {
   const [filteredData, setFilteredData] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
@@ -586,11 +624,7 @@ export const Transactions = () => {
   const [searchText, setSearchText] = useState('');
   const [importNotice, setImportNotice] = useState<ImportNotice | null>(null);
   const [compactView, setCompactView] = useState(false); // new state for compact mode
-
-  // Load data
-  useEffect(() => {
-    loadData();
-  }, []);
+  const [pendingDeleteTransactionId, setPendingDeleteTransactionId] = useState<string | null>(null);
 
   // Load import notice (same as before)
   useEffect(() => {
@@ -633,12 +667,15 @@ export const Transactions = () => {
     setFilteredData(result);
   }, [data, filterAccount, filterType, filterStartDate, filterEndDate, searchText]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!window.electron) return;
     try {
-      const txs = await window.electron.invoke('db-get-transactions', {}) as Transaction[];
-      const accs = await window.electron.invoke('db-get-accounts') as Account[];
-      const cats = await window.electron.invoke('db-get-categories') as Category[];
+      const [txs, accs, cats, goalsData] = await Promise.all([
+        window.electron.invoke('db-get-transactions', {}) as Promise<Transaction[]>,
+        window.electron.invoke('db-get-accounts') as Promise<Account[]>,
+        window.electron.invoke('db-get-categories') as Promise<Category[]>,
+        window.electron.invoke('db-get-goals').catch(() => []) as Promise<Goal[]>
+      ]);
       const processedTxs: Transaction[] = txs.map((tx) => ({
         ...tx,
         tags: tx.tags ? (Array.isArray(tx.tags) ? tx.tags : JSON.parse(tx.tags)) : [],
@@ -646,8 +683,22 @@ export const Transactions = () => {
       setData(processedTxs);
       setAccounts(accs);
       setCategories(cats);
+      setGoals(Array.isArray(goalsData) ? goalsData : []);
     } catch (e) { console.error(e); } finally { setLoading(false); }
-  };
+  }, []);
+
+  // Load data
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    const onChanged = () => {
+      void loadData();
+    };
+    window.addEventListener('finance:data-changed', onChanged);
+    return () => window.removeEventListener('finance:data-changed', onChanged);
+  }, [loadData]);
 
   const handleSave = async (txData: TransactionSavePayload) => {
     if (!window.electron) return;
@@ -658,7 +709,13 @@ export const Transactions = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('transactions.deleteConfirm'))) return;
+    setPendingDeleteTransactionId(id);
+  };
+
+  const confirmDeleteTransaction = async () => {
+    const id = pendingDeleteTransactionId;
+    if (!id) return;
+    setPendingDeleteTransactionId(null);
     if (!window.electron) return;
     await window.electron.invoke('db-delete-transaction', id);
     await loadData();
@@ -673,7 +730,7 @@ export const Transactions = () => {
   if (loading) return <div className="p-4 text-ink">{t('transactions.loading')}</div>;
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full min-h-0 flex flex-col">
       {/* Header with compact toggle */}
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-3xl font-bold font-heading text-ink">{t('transactions.title')}</h2>
@@ -721,7 +778,7 @@ export const Transactions = () => {
           <input
             type="text"
             placeholder={t('transactions.searchPlaceholder')}
-            className="pl-10 p-2 w-full border-theme rounded bg-theme-surface text-ink"
+            className="ui-field pl-10"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
           />
@@ -800,10 +857,22 @@ export const Transactions = () => {
           editingTx={editingTx}
           accounts={accounts}
           categories={categories}
+          goals={goals}
           onSave={handleSave}
           merchantSuggestions={merchantSuggestions}
         />
       )}
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteTransactionId)}
+        title={t('common.delete')}
+        message={t('transactions.deleteConfirm')}
+        destructive
+        onCancel={() => setPendingDeleteTransactionId(null)}
+        onConfirm={() => {
+          void confirmDeleteTransaction();
+        }}
+      />
     </div>
   );
 };

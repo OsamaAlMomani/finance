@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { onFinanceDataChanged } from '../services/dataEvents';
+import { ipcClient } from '../services/ipcClient';
 
 type PaymentFrequency = 'monthly' | 'biweekly' | 'weekly';
 type PlannerMode = 'balanced' | 'debt_attack' | 'goal_focus' | 'custom';
@@ -176,6 +178,7 @@ export const ScenariosPage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const [loans, setLoans] = useState<Loan[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -194,18 +197,13 @@ export const ScenariosPage = () => {
   });
 
   const loadData = async () => {
-    if (!window.electron) {
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     try {
       const [loansData, goalsData, scenariosData, statsData] = await Promise.all([
-        window.electron.invoke('db-get-loans'),
-        window.electron.invoke('db-get-goals'),
-        window.electron.invoke('db-get-scenarios'),
-        window.electron.invoke('db-get-dashboard-stats')
+        ipcClient.scenarios.getLoans(),
+        ipcClient.scenarios.getGoals(),
+        ipcClient.scenarios.getScenarios(),
+        ipcClient.scenarios.getDashboardStats()
       ]);
 
       setLoans(Array.isArray(loansData) ? (loansData as Loan[]) : []);
@@ -240,11 +238,10 @@ export const ScenariosPage = () => {
   }, []);
 
   useEffect(() => {
-    const onChanged = () => {
+    const off = onFinanceDataChanged(() => {
       void loadData();
-    };
-    window.addEventListener('finance:data-changed', onChanged);
-    return () => window.removeEventListener('finance:data-changed', onChanged);
+    });
+    return off;
   }, []);
 
   const monthlyIncome = toNumber(form.monthlyIncome);
@@ -390,7 +387,6 @@ export const ScenariosPage = () => {
   const selectedPreset = form.mode === 'custom' ? null : MODE_PRESETS[form.mode];
 
   const handleSaveScenario = async () => {
-    if (!window.electron) return;
     const title = form.title.trim();
     if (!title) {
       setSaveError('Add a scenario title before saving.');
@@ -444,7 +440,7 @@ export const ScenariosPage = () => {
         }
       };
 
-      await window.electron.invoke('db-save-scenario', {
+      await ipcClient.scenarios.saveScenario({
         id: uuidv4(),
         title,
         assumptions: resultSnapshot.assumptions,
@@ -453,7 +449,7 @@ export const ScenariosPage = () => {
       });
 
       setForm((prev) => ({ ...prev, title: '' }));
-      window.dispatchEvent(new CustomEvent('finance:data-changed'));
+      setConfirmDeleteId(null);
       await loadData();
     } catch (error) {
       console.error('Failed to save planner scenario', error);
@@ -464,11 +460,18 @@ export const ScenariosPage = () => {
   };
 
   const handleDeleteScenario = async (id: string) => {
-    if (!window.electron) return;
-    if (!confirm('Delete this saved scenario?')) return;
-    await window.electron.invoke('db-delete-scenario', id);
-    window.dispatchEvent(new CustomEvent('finance:data-changed'));
-    await loadData();
+    if (confirmDeleteId !== id) {
+      setConfirmDeleteId(id);
+      return;
+    }
+
+    try {
+      await ipcClient.scenarios.deleteScenario(id);
+      setConfirmDeleteId(null);
+      await loadData();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Failed to delete scenario. Please try again.');
+    }
   };
 
   if (loading) {
@@ -502,7 +505,7 @@ export const ScenariosPage = () => {
               </label>
               <input
                 id="planner-title"
-                className="w-full p-2 border rounded"
+                className="ui-field"
                 value={form.title}
                 onChange={(event) => setForm({ ...form, title: event.target.value })}
                 placeholder="e.g. Balanced plan for next 12 months"
@@ -515,7 +518,7 @@ export const ScenariosPage = () => {
               <input
                 id="planner-income"
                 type="number"
-                className="w-full p-2 border rounded"
+                className="ui-field"
                 value={form.monthlyIncome}
                 onChange={(event) => setForm({ ...form, monthlyIncome: event.target.value })}
               />
@@ -527,7 +530,7 @@ export const ScenariosPage = () => {
               <input
                 id="planner-expenses"
                 type="number"
-                className="w-full p-2 border rounded"
+                className="ui-field"
                 value={form.fixedExpenses}
                 onChange={(event) => setForm({ ...form, fixedExpenses: event.target.value })}
               />
@@ -539,7 +542,7 @@ export const ScenariosPage = () => {
               <input
                 id="planner-emergency"
                 type="number"
-                className="w-full p-2 border rounded"
+                className="ui-field"
                 value={form.emergencyTopUp}
                 onChange={(event) => setForm({ ...form, emergencyTopUp: event.target.value })}
               />
@@ -551,7 +554,7 @@ export const ScenariosPage = () => {
               <input
                 id="planner-buffer"
                 type="number"
-                className="w-full p-2 border rounded"
+                className="ui-field"
                 value={form.bufferDelta}
                 onChange={(event) => setForm({ ...form, bufferDelta: event.target.value })}
               />
@@ -564,7 +567,7 @@ export const ScenariosPage = () => {
                 id="planner-horizon"
                 type="number"
                 min={1}
-                className="w-full p-2 border rounded"
+                className="ui-field"
                 value={form.horizonMonths}
                 onChange={(event) => setForm({ ...form, horizonMonths: event.target.value })}
               />
@@ -612,7 +615,7 @@ export const ScenariosPage = () => {
                   className="w-full"
                 />
               </div>
-              <div className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2">
+              <div className="ui-soft-row">
                 <div className="text-sm font-semibold">Current split</div>
                 <div className="text-sm text-gray-600">
                   Loans: {Math.round(loanRatio * 100)}% | Goals: {Math.round(goalRatio * 100)}%
@@ -625,7 +628,7 @@ export const ScenariosPage = () => {
         <section className="card">
           <h3 className="text-xl font-bold mb-3">2) Logical Equation Output</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="rounded-lg border border-gray-300 bg-gray-50 p-3">
+            <div className="ui-soft-panel">
               <p className="font-bold mb-1">Available cash equation</p>
               <p className="text-sm text-gray-700">A = I - E - M - B + D</p>
               <p className="text-sm text-gray-700">
@@ -637,7 +640,7 @@ export const ScenariosPage = () => {
               </p>
             </div>
 
-            <div className="rounded-lg border border-gray-300 bg-gray-50 p-3">
+            <div className="ui-soft-panel">
               <p className="font-bold mb-1">Allocation equation</p>
               <p className="text-sm text-gray-700">LoanExtra = max(A, 0) * loanRatio</p>
               <p className="text-sm text-gray-700">GoalExtra = max(A, 0) * goalRatio</p>
@@ -798,8 +801,17 @@ export const ScenariosPage = () => {
                       className="mt-2 btn btn-sm bg-rose-100 text-rose-700"
                       onClick={() => void handleDeleteScenario(scenario.id)}
                     >
-                      Delete
+                      {confirmDeleteId === scenario.id ? 'Confirm Delete' : 'Delete'}
                     </button>
+                    {confirmDeleteId === scenario.id && (
+                      <button
+                        type="button"
+                        className="mt-2 ml-2 btn btn-sm bg-gray-100 text-gray-700"
+                        onClick={() => setConfirmDeleteId(null)}
+                      >
+                        Cancel
+                      </button>
+                    )}
                   </div>
                 );
               })}

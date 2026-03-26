@@ -8,11 +8,12 @@ type BrandBadgeProps = {
 
 export const BrandBadge = ({ compact = false, className = '', showTagline = true }: BrandBadgeProps) => {
   const { t } = useI18n();
+  const brandMarkSrc = `${import.meta.env.BASE_URL}brand/stock-tracker-mark.svg`;
 
   return (
     <div className={`brand-badge ${compact ? 'brand-badge-compact' : ''} ${className}`.trim()}>
       <img
-        src="/brand/stock-tracker-mark.svg"
+        src={brandMarkSrc}
         alt={t('app.aboutTitle')}
         className="brand-badge-mark"
       />

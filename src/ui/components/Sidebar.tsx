@@ -7,11 +7,15 @@ import {
   Target,
   CalendarDays,
   LineChart,
+  Wallet,
   Settings,
   CreditCard,
   FileUp,
   ClipboardList,
-  LogOut,
+  AlertTriangle,
+  Scale,
+  FileChartColumn,
+  Share2,
   ChevronLeft,
   ChevronRight,
   Menu,
@@ -32,12 +36,17 @@ interface SidebarNavItem {
 const MAIN_LINKS: SidebarNavItem[] = [
   { to: '/', labelKey: 'sidebar.dashboard', icon: LayoutDashboard },
   { to: '/transactions', labelKey: 'sidebar.transactions', icon: Receipt },
+  { to: '/accounts', labelKey: 'sidebar.accounts', icon: Wallet },
   { to: '/budget', labelKey: 'sidebar.budget', icon: PiggyBank },
   { to: '/goals', labelKey: 'sidebar.goals', icon: Target },
   { to: '/bills', labelKey: 'sidebar.bills', icon: CalendarDays },
   { to: '/loans', labelKey: 'sidebar.loans', icon: CreditCard },
   { to: '/plans', labelKey: 'sidebar.plans', icon: ClipboardList },
   { to: '/scenarios', labelKey: 'sidebar.scenarios', icon: LineChart },
+  { to: '/alerts', labelKey: 'sidebar.alerts', icon: AlertTriangle },
+  { to: '/settlement', labelKey: 'sidebar.settlement', icon: Scale },
+  { to: '/reports', labelKey: 'sidebar.reports', icon: FileChartColumn },
+  { to: '/sharing', labelKey: 'sidebar.sharing', icon: Share2 },
   { to: '/import-export', labelKey: 'sidebar.importExport', icon: FileUp }
 ];
 
@@ -61,7 +70,6 @@ export const Sidebar = () => {
 
   const shouldShowLabels = isMobile || !collapsed;
   const collapsedLabelOffset = dir === 'rtl' ? 8 : -8;
-  const desktopHoverX = dir === 'rtl' ? -3 : 3;
   const mobileHiddenX = dir === 'rtl' ? '106%' : '-106%';
 
   const toggleSidebar = () => {
@@ -214,29 +222,6 @@ export const Sidebar = () => {
 
         <div className="mt-auto">
           {FOOTER_LINKS.map((item, index) => renderNavLink(item, MAIN_LINKS.length + index))}
-          <motion.button
-            className="sidebar-nav-link w-full text-left"
-            onClick={() => {
-              localStorage.removeItem('authUserId');
-              window.location.reload();
-            }}
-            whileHover={{ x: isMobile ? 0 : desktopHoverX }}
-            whileTap={{ scale: 0.98 }}
-          >
-            <LogOut size={22} />
-            <motion.span
-              className="inline-block overflow-hidden whitespace-nowrap"
-              initial={false}
-              animate={
-                shouldShowLabels
-                  ? { width: 'auto', opacity: 1, x: 0 }
-                  : { width: 0, opacity: 0, x: collapsedLabelOffset }
-              }
-              transition={{ duration: 0.16, ease: 'easeOut' }}
-            >
-              {t('sidebar.logout')}
-            </motion.span>
-          </motion.button>
         </div>
       </motion.aside>
     </>

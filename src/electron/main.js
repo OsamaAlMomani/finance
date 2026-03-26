@@ -5,6 +5,11 @@ import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import { initDatabase, switchDatabase } from '../services/databaseService.js';
 import { registerIpcHandlers } from './ipcHandlers.js';
+import {
+  clearUserCredential,
+  saveUserCredential,
+  verifyUserCredential
+} from './credentialStore.js';
 
 const require = createRequire(import.meta.url);
 const { app, BrowserWindow, ipcMain, Menu, globalShortcut, dialog } = require('electron');
@@ -29,6 +34,67 @@ guardProcessStream(process.stderr);
 let mainWindow;
 let menuVisible = true;
 let appMenu = null;
+let webDiagnosticsAttached = false;
+const DEV_SERVER_URL = 'http://localhost:5173';
+const WINDOW_BACKGROUND_COLOR = '#f6f9ff';
+const shouldOpenDevTools = process.env.ELECTRON_OPEN_DEVTOOLS === '1';
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const waitForDevServer = async (url, timeoutMs = 25000) => {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const response = await fetch(url, { method: 'GET' });
+      if (response.ok) return true;
+    } catch (_error) {
+      // Dev server is not ready yet.
+    }
+    await wait(400);
+  }
+  return false;
+};
+
+const shouldLogResourceIssue = (url) => {
+  const target = String(url || '');
+  if (!target) return false;
+  if (target.startsWith('devtools://')) return false;
+  if (target.startsWith('chrome-extension://')) return false;
+  return true;
+};
+
+const attachWebDiagnostics = (webContents) => {
+  if (webDiagnosticsAttached) return;
+  const session = webContents?.session;
+  if (!session?.webRequest) return;
+
+  webDiagnosticsAttached = true;
+
+  session.webRequest.onErrorOccurred((details) => {
+    if (!shouldLogResourceIssue(details.url)) return;
+    if (details.error === 'net::ERR_ABORTED') return;
+    console.warn(`[web-resource-error] ${details.error} (${details.resourceType}) ${details.url}`);
+  });
+
+  session.webRequest.onCompleted((details) => {
+    if (!shouldLogResourceIssue(details.url)) return;
+    if (Number(details.statusCode) >= 400) {
+      console.warn(`[web-resource-http] ${details.statusCode} (${details.resourceType}) ${details.url}`);
+    }
+  });
+};
+
+const ensureSessionDataPath = () => {
+  try {
+    const sessionPath = path.join(app.getPath('userData'), 'session-data');
+    if (!fs.existsSync(sessionPath)) {
+      fs.mkdirSync(sessionPath, { recursive: true });
+    }
+    app.setPath('sessionData', sessionPath);
+  } catch (error) {
+    console.warn('Unable to set custom sessionData path:', error?.message || error);
+  }
+};
 
 const createAppMenu = () => {
   const template = [
@@ -156,12 +222,127 @@ const getRendererIndexPath = () => {
   return candidates[0];
 };
 
-function createWindow() {
+const getBootHtml = (isDevelopment) => `
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Finance</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Segoe UI", Tahoma, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at top left, rgba(14, 165, 233, 0.16), transparent 32%),
+          radial-gradient(circle at top right, rgba(99, 102, 241, 0.14), transparent 34%),
+          linear-gradient(180deg, #f9fbff 0%, #eef3ff 100%);
+        color: #10213a;
+      }
+
+      .boot-shell {
+        width: min(30rem, calc(100vw - 3rem));
+        padding: 1.4rem 1.5rem;
+        border-radius: 1.5rem;
+        border: 1px solid rgba(214, 222, 236, 0.95);
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow:
+          0 18px 42px -26px rgba(15, 23, 42, 0.45),
+          0 12px 24px -18px rgba(37, 99, 235, 0.28);
+        backdrop-filter: blur(10px);
+      }
+
+      .boot-row {
+        display: flex;
+        align-items: center;
+        gap: 0.9rem;
+      }
+
+      .boot-mark {
+        width: 2.8rem;
+        height: 2.8rem;
+        border-radius: 1rem;
+        background: linear-gradient(135deg, #2563eb 0%, #38bdf8 100%);
+        box-shadow: 0 10px 24px -14px rgba(37, 99, 235, 0.7);
+      }
+
+      .boot-copy strong {
+        display: block;
+        font-size: 1rem;
+        font-weight: 700;
+      }
+
+      .boot-copy span {
+        display: block;
+        margin-top: 0.2rem;
+        color: #64748b;
+        font-size: 0.92rem;
+      }
+
+      .boot-bar {
+        margin-top: 1rem;
+        height: 0.45rem;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.22);
+      }
+
+      .boot-bar::after {
+        content: "";
+        display: block;
+        width: 38%;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #2563eb 0%, #38bdf8 100%);
+        animation: boot-slide 1.2s ease-in-out infinite;
+      }
+
+      @keyframes boot-slide {
+        0% { transform: translateX(-110%); }
+        60% { transform: translateX(185%); }
+        100% { transform: translateX(185%); }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="boot-shell">
+      <div class="boot-row">
+        <div class="boot-mark" aria-hidden="true"></div>
+        <div class="boot-copy">
+          <strong>Finance</strong>
+          <span>${isDevelopment ? 'Starting workspace and syncing the local dashboard...' : 'Loading your local workspace...'}</span>
+        </div>
+      </div>
+      <div class="boot-bar" aria-hidden="true"></div>
+    </div>
+  </body>
+</html>
+`;
+
+const loadBootScreen = async (browserWindow) => {
+  const html = getBootHtml(isDev);
+  await browserWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`);
+};
+
+async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     frame: false,
+    show: false,
     autoHideMenuBar: true,
+    backgroundColor: WINDOW_BACKGROUND_COLOR,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -170,22 +351,33 @@ function createWindow() {
     },
     title: 'Stock Tracker'
   });
+  attachWebDiagnostics(mainWindow.webContents);
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
+  });
+
+  await loadBootScreen(mainWindow);
 
   if (isDev) {
-    const devUrl = 'http://localhost:5173';
-    mainWindow.loadURL(devUrl);
+    const devServerReady = await waitForDevServer(DEV_SERVER_URL);
+    if (devServerReady) {
+      await mainWindow.loadURL(DEV_SERVER_URL);
+    } else {
+      console.warn(`[DEV] Vite server is unavailable at ${DEV_SERVER_URL}. Falling back to built UI (minified stack traces).`);
+      await mainWindow.loadFile(getRendererIndexPath());
+    }
 
-    mainWindow.webContents.on('did-fail-load', () => {
-      mainWindow.loadFile(getRendererIndexPath());
-    });
-
-    mainWindow.webContents.openDevTools();
+    if (shouldOpenDevTools) {
+      mainWindow.webContents.openDevTools({ mode: 'detach' });
+    }
   } else {
-    mainWindow.loadFile(getRendererIndexPath());
+    await mainWindow.loadFile(getRendererIndexPath());
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  ensureSessionDataPath();
+
   // Initialize Database (per-user, per-profile)
   const usersData = loadUsers();
   let { activeUserId, users } = usersData;
@@ -228,7 +420,7 @@ app.whenReady().then(() => {
     return;
   }
 
-  createWindow();
+  await createWindow();
   createAppMenu();
 
   globalShortcut.register('Ctrl+Shift+M', () => {
@@ -237,7 +429,7 @@ app.whenReady().then(() => {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      void createWindow();
     }
   });
 });
@@ -275,6 +467,18 @@ ipcMain.handle('user-set-active', (e, userId) => {
   const dbPath = getProfileDbPath(userId, profileId);
   switchDatabase(dbPath);
   return data;
+});
+
+ipcMain.handle('auth-store-credential', async (_event, userId, secret) => {
+  return saveUserCredential(userId, secret);
+});
+
+ipcMain.handle('auth-verify-credential', async (_event, userId, secret) => {
+  return verifyUserCredential(userId, secret);
+});
+
+ipcMain.handle('auth-clear-credential', (_event, userId) => {
+  return clearUserCredential(userId);
 });
 
 ipcMain.handle('profile-create', (e, userId, name, avatar, options = {}) => {

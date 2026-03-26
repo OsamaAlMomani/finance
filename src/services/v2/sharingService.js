@@ -14,6 +14,8 @@ const createShareSnapshot = (db, input) => {
     throw new Error('Cannot create share snapshot without report data.');
   }
 
+  const snapshotName = (input.snapshot_name || `Snapshot ${report.month}`).trim() || `Snapshot ${report.month}`;
+
   const payloadObject = {
     reportId: report.id,
     month: report.month,
@@ -27,13 +29,39 @@ const createShareSnapshot = (db, input) => {
   const payloadJson = JSON.stringify(payloadObject);
   const integrityHash = createIntegrityHash(payloadJson);
 
+  const duplicateByName = db.prepare(`
+    SELECT id
+    FROM share_snapshots
+    WHERE report_id = ?
+      AND status = 'active'
+      AND lower(trim(snapshot_name)) = lower(trim(?))
+    LIMIT 1
+  `).get(report.id, snapshotName);
+
+  if (duplicateByName?.id) {
+    throw new Error('Duplicate sharing link name for this report. Rename or revoke the existing link first.');
+  }
+
+  const duplicateByPayload = db.prepare(`
+    SELECT id
+    FROM share_snapshots
+    WHERE report_id = ?
+      AND status = 'active'
+      AND integrity_hash = ?
+    LIMIT 1
+  `).get(report.id, integrityHash);
+
+  if (duplicateByPayload?.id) {
+    throw new Error('Duplicate sharing link payload for this report. Reuse the existing active link instead.');
+  }
+
   db.prepare(`
     INSERT INTO share_snapshots (id, report_id, snapshot_name, payload_json, integrity_hash, status, expires_at)
     VALUES (@id, @reportId, @snapshotName, @payloadJson, @integrityHash, 'active', @expiresAt)
   `).run({
     id: input.id,
     reportId: report.id,
-    snapshotName: input.snapshot_name || `Snapshot ${report.month}`,
+    snapshotName,
     payloadJson,
     integrityHash,
     expiresAt: input.expires_at || null

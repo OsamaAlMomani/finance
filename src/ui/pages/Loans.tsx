@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { PlusCircle, Trash2, Edit2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useI18n } from '../contexts/useI18n';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { onFinanceDataChanged } from '../services/dataEvents';
 
 interface Loan {
   id: string;
@@ -14,10 +16,16 @@ interface Loan {
   payment_frequency: 'monthly' | 'biweekly' | 'weekly';
   start_date: string;
   end_date: string;
+  linked_account_id?: string | null;
   lender: string;
   notes?: string;
   next_due_date?: string;
   due_status?: 'upcoming' | 'due_soon' | 'overdue' | string;
+}
+
+interface Account {
+  id: string;
+  name: string;
 }
 
 interface LoanPaymentStat {
@@ -71,9 +79,11 @@ export const LoansPage = () => {
   const { t } = useI18n();
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
   const [payingLoanId, setPayingLoanId] = useState<string | null>(null);
+  const [pendingDeleteLoanId, setPendingDeleteLoanId] = useState<string | null>(null);
   const [paymentStatsByLoanId, setPaymentStatsByLoanId] = useState<Record<string, LoanPaymentStat>>({});
 
   const [loanForm, setLoanForm] = useState<{
@@ -85,6 +95,7 @@ export const LoansPage = () => {
     payment_frequency: 'monthly' | 'biweekly' | 'weekly';
     start_date: string;
     end_date: string;
+    linked_account_id: string;
     lender: string;
     notes: string;
     next_due_date: string;
@@ -98,46 +109,46 @@ export const LoansPage = () => {
     payment_frequency: 'monthly',
     start_date: new Date().toISOString().split('T')[0],
     end_date: '',
+    linked_account_id: '',
     lender: '',
     notes: '',
     next_due_date: new Date().toISOString().split('T')[0],
     due_status: 'upcoming'
   });
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const accountNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const account of accounts) {
+      map[account.id] = account.name;
+    }
+    return map;
+  }, [accounts]);
 
-  useEffect(() => {
-    const onChanged = () => loadData();
-    window.addEventListener('finance:data-changed', onChanged);
-    return () => window.removeEventListener('finance:data-changed', onChanged);
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!window.electron) {
       setLoading(false);
       return;
     }
 
     try {
-      const [loansData, paymentStatsData] = await Promise.all([
+      const [loansData, paymentStatsData, accountsData] = await Promise.all([
         window.electron.invoke('db-get-loans'),
-        window.electron.invoke('db-get-loan-payment-stats').catch(() => [])
+        window.electron.invoke('db-get-loan-payment-stats').catch(() => []),
+        window.electron.invoke('db-get-accounts').catch(() => [])
       ]);
       setLoans(Array.isArray(loansData) ? loansData : []);
+      setAccounts(Array.isArray(accountsData) ? accountsData : []);
       const statsMap: Record<string, LoanPaymentStat> = {};
-      if (Array.isArray(paymentStatsData)) {
-        for (const stat of paymentStatsData) {
-          if (!stat || !stat.loan_id) continue;
-          statsMap[stat.loan_id] = {
-            loan_id: stat.loan_id,
-            payment_count: toNumber(stat.payment_count),
-            total_paid: toNumber(stat.total_paid),
-            last_paid_at: stat.last_paid_at || null,
-            last_amount: toNumber(stat.last_amount)
-          };
-        }
+      const paymentStatsList = Array.isArray(paymentStatsData) ? paymentStatsData : [];
+      for (const stat of paymentStatsList) {
+        if (!stat || !stat.loan_id) continue;
+        statsMap[stat.loan_id] = {
+          loan_id: stat.loan_id,
+          payment_count: toNumber(stat.payment_count),
+          total_paid: toNumber(stat.total_paid),
+          last_paid_at: stat.last_paid_at || null,
+          last_amount: toNumber(stat.last_amount)
+        };
       }
       setPaymentStatsByLoanId(statsMap);
     } catch (error) {
@@ -145,7 +156,18 @@ export const LoansPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    const off = onFinanceDataChanged(() => {
+      void loadData();
+    });
+    return off;
+  }, [loadData]);
 
   const calculateProgress = (loan: Loan) => {
     const principal = toNumber(loan.principal_amount);
@@ -167,6 +189,7 @@ export const LoansPage = () => {
         payment_frequency: loan.payment_frequency,
         start_date: loan.start_date,
         end_date: loan.end_date,
+        linked_account_id: loan.linked_account_id || '',
         lender: loan.lender,
         notes: loan.notes || '',
         next_due_date: loan.next_due_date || loan.end_date || new Date().toISOString().split('T')[0],
@@ -183,6 +206,7 @@ export const LoansPage = () => {
         payment_frequency: 'monthly',
         start_date: new Date().toISOString().split('T')[0],
         end_date: '',
+        linked_account_id: '',
         lender: '',
         notes: '',
         next_due_date: new Date().toISOString().split('T')[0],
@@ -206,6 +230,7 @@ export const LoansPage = () => {
       payment_frequency: loanForm.payment_frequency,
       start_date: loanForm.start_date,
       end_date: loanForm.end_date,
+      linked_account_id: loanForm.linked_account_id || null,
       lender: loanForm.lender,
       notes: loanForm.notes,
       next_due_date: loanForm.next_due_date,
@@ -213,17 +238,21 @@ export const LoansPage = () => {
     });
 
     setShowModal(false);
-    window.dispatchEvent(new CustomEvent('finance:data-changed'));
-    loadData();
+    void loadData();
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm(t('loans.deleteConfirm'))) return;
+    setPendingDeleteLoanId(id);
+  };
+
+  const confirmDeleteLoan = async () => {
+    const id = pendingDeleteLoanId;
+    if (!id) return;
+    setPendingDeleteLoanId(null);
     if (!window.electron) return;
 
     await window.electron.invoke('db-delete-loan', id);
-    window.dispatchEvent(new CustomEvent('finance:data-changed'));
-    loadData();
+    void loadData();
   };
 
   const handlePay = async (loan: Loan) => {
@@ -240,8 +269,7 @@ export const LoansPage = () => {
         loanId: loan.id,
         amount: paymentAmount
       });
-      window.dispatchEvent(new CustomEvent('finance:data-changed'));
-      loadData();
+      void loadData();
     } catch (error) {
       console.error('Failed to apply payment:', error);
     } finally {
@@ -249,7 +277,7 @@ export const LoansPage = () => {
     }
   };
 
-  if (loading) return <div>{t('common.loading')}</div>;
+  if (loading) return <div className="card text-ink">{t('common.loading')}</div>;
 
   const totalDebt = loans.reduce((sum, loan) => sum + toNumber(loan.current_balance), 0);
   const totalOriginal = loans.reduce((sum, loan) => sum + Math.max(0, toNumber(loan.principal_amount)), 0);
@@ -260,9 +288,9 @@ export const LoansPage = () => {
   const overallProgress = totalOriginal > 0 ? clampPercent((totalPaid / totalOriginal) * 100) : 0;
 
   return (
-    <div className="loans-page h-full flex flex-col overflow-hidden">
+    <div className="loans-page ui-page-shell overflow-hidden">
       <motion.div
-        className="flex flex-wrap justify-between items-center gap-3 mb-5"
+        className="ui-page-header"
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2 }}
@@ -273,25 +301,25 @@ export const LoansPage = () => {
         </div>
         <button
           onClick={() => handleOpenModal()}
-          className="btn bg-red-500 text-white flex items-center gap-2"
+          className="btn flex items-center gap-2"
         >
           <PlusCircle size={18} /> {t('loans.add')}
         </button>
       </motion.div>
 
       <section className="card mb-5">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-          <div>
-            <p className="text-xs uppercase text-gray-400">{t('loans.totalDebt')}</p>
-            <p className="text-2xl font-bold text-red-600">{formatMoney(totalDebt)}</p>
+        <div className="ui-metric-grid-3 mb-4">
+          <div className="ui-metric-tile">
+            <p className="ui-metric-label">{t('loans.totalDebt')}</p>
+            <p className="ui-metric-value text-red-600">{formatMoney(totalDebt)}</p>
           </div>
-          <div>
-            <p className="text-xs uppercase text-gray-400">{t('loans.totalPaid')}</p>
-            <p className="text-2xl font-bold text-green-600">{formatMoney(totalPaid)}</p>
+          <div className="ui-metric-tile">
+            <p className="ui-metric-label">{t('loans.totalPaid')}</p>
+            <p className="ui-metric-value text-green-600">{formatMoney(totalPaid)}</p>
           </div>
-          <div>
-            <p className="text-xs uppercase text-gray-400">{t('loans.progress')}</p>
-            <p className="text-2xl font-bold text-blue-600">{overallProgress.toFixed(1)}%</p>
+          <div className="ui-metric-tile">
+            <p className="ui-metric-label">{t('loans.progress')}</p>
+            <p className="ui-metric-value text-blue-600">{overallProgress.toFixed(1)}%</p>
           </div>
         </div>
 
@@ -323,7 +351,7 @@ export const LoansPage = () => {
               <motion.article
                 key={loan.id}
                 layout
-                className="card border border-theme bg-white/80"
+                className="card"
                 custom={index}
                 variants={loanCardMotion}
                 initial="hidden"
@@ -336,7 +364,7 @@ export const LoansPage = () => {
                     <p className="text-sm text-gray-500">{loan.lender}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full border px-2.5 py-1 text-xs font-bold bg-blue-50 border-blue-200 text-blue-700">
+                    <span className={`ui-badge ${dueStatus === 'overdue' ? 'ui-badge-danger' : dueStatus === 'due_soon' ? 'ui-badge-warning' : 'ui-badge-active'}`}>
                       {t(statusLabelKey[dueStatus])}
                     </span>
                     <button
@@ -380,6 +408,11 @@ export const LoansPage = () => {
                   </div>
                 </div>
 
+                <div className="mb-3 text-xs text-gray-500">
+                  <span className="font-semibold">Payment account:</span>{' '}
+                  {loan.linked_account_id ? (accountNameById[loan.linked_account_id] || loan.linked_account_id) : 'not linked'}
+                </div>
+
                 <div className="mb-3">
                   <div className="flex justify-between text-xs mb-1">
                     <span className="text-gray-500">{t('loans.progress')}</span>
@@ -408,8 +441,8 @@ export const LoansPage = () => {
                   )}
                 </div>
 
-                <div className="rounded-lg border border-gray-200 bg-gray-50/60 px-3 py-2 mb-3 text-xs text-gray-600 space-y-1">
-                  <p className="font-semibold uppercase tracking-wide text-gray-500">{t('loans.paymentHistory')}</p>
+                <div className="ui-soft-panel mb-3 text-xs text-muted space-y-1">
+                  <p className="font-semibold uppercase tracking-wide text-muted">{t('loans.paymentHistory')}</p>
                   <p>{t('loans.paymentCount', { count: paymentStat?.payment_count || 0 })}</p>
                   <p>{t('loans.loggedPaidTotal', { amount: (paymentStat?.total_paid || 0).toFixed(2) })}</p>
                   <p>
@@ -425,7 +458,7 @@ export const LoansPage = () => {
                 <button
                   type="button"
                   className={`btn w-full ${
-                    isPaidOff ? 'bg-gray-300 text-gray-700 cursor-not-allowed' : 'bg-emerald-600 text-white'
+                    isPaidOff ? 'bg-gray-300 text-gray-700 cursor-not-allowed border-gray-300 shadow-none' : ''
                   }`}
                   disabled={isPaidOff || paymentAmount <= 0 || isPaying}
                   onClick={() => handlePay(loan)}
@@ -445,7 +478,7 @@ export const LoansPage = () => {
 
         {loans.length === 0 && (
           <motion.div
-            className="lg:col-span-2 text-center py-12 text-gray-400 border-2 border-dashed border-gray-300 rounded-xl bg-white/50"
+            className="lg:col-span-2 ui-empty-state"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
           >
@@ -457,14 +490,14 @@ export const LoansPage = () => {
       <AnimatePresence>
         {showModal && (
           <motion.div
-            className="fixed inset-0 bg-black/35 backdrop-blur-sm flex items-center justify-center z-50 px-3"
+            className="app-modal-backdrop px-3"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setShowModal(false)}
           >
             <motion.div
-              className="bg-white p-6 rounded-xl shadow-xl w-full max-w-2xl border-2 border-gray-200 max-h-[90vh] overflow-y-auto"
+              className="app-modal-card w-full max-w-2xl"
               initial={{ opacity: 0, y: 22, scale: 0.97 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.98 }}
@@ -482,7 +515,7 @@ export const LoansPage = () => {
                     </label>
                     <input
                       id="loan-name"
-                      className="w-full p-2 border rounded font-hand text-lg"
+                      className="ui-field ui-field-lg font-hand"
                       placeholder={t('loans.namePlaceholder')}
                       required
                       value={loanForm.name}
@@ -495,7 +528,7 @@ export const LoansPage = () => {
                     </label>
                     <input
                       id="loan-lender"
-                      className="w-full p-2 border rounded font-hand text-lg"
+                      className="ui-field ui-field-lg font-hand"
                       placeholder={t('loans.lenderPlaceholder')}
                       required
                       value={loanForm.lender}
@@ -513,7 +546,7 @@ export const LoansPage = () => {
                       id="loan-principal"
                       type="number"
                       step="0.01"
-                      className="w-full p-2 border rounded font-hand text-lg"
+                      className="ui-field ui-field-lg font-hand"
                       placeholder={t('loans.amountPlaceholder')}
                       required
                       value={loanForm.principal_amount}
@@ -528,7 +561,7 @@ export const LoansPage = () => {
                       id="loan-balance"
                       type="number"
                       step="0.01"
-                      className="w-full p-2 border rounded font-hand text-lg"
+                      className="ui-field ui-field-lg font-hand"
                       placeholder={t('loans.amountPlaceholder')}
                       required
                       value={loanForm.current_balance}
@@ -546,7 +579,7 @@ export const LoansPage = () => {
                       id="loan-rate"
                       type="number"
                       step="0.01"
-                      className="w-full p-2 border rounded font-hand text-lg"
+                      className="ui-field ui-field-lg font-hand"
                       placeholder={t('loans.ratePlaceholder')}
                       required
                       value={loanForm.interest_rate}
@@ -561,7 +594,7 @@ export const LoansPage = () => {
                       id="loan-payment"
                       type="number"
                       step="0.01"
-                      className="w-full p-2 border rounded font-hand text-lg"
+                      className="ui-field ui-field-lg font-hand"
                       placeholder={t('loans.amountPlaceholder')}
                       required
                       value={loanForm.payment_amount}
@@ -577,7 +610,7 @@ export const LoansPage = () => {
                     </label>
                     <select
                       id="loan-frequency"
-                      className="w-full p-2 border rounded font-hand text-lg"
+                      className="ui-field ui-field-lg font-hand"
                       value={loanForm.payment_frequency}
                       onChange={(event) =>
                         setLoanForm({
@@ -598,7 +631,7 @@ export const LoansPage = () => {
                     <input
                       id="loan-start"
                       type="date"
-                      className="w-full p-2 border rounded font-hand text-lg"
+                      className="ui-field ui-field-lg font-hand"
                       required
                       value={loanForm.start_date}
                       onChange={(event) => setLoanForm({ ...loanForm, start_date: event.target.value })}
@@ -611,7 +644,7 @@ export const LoansPage = () => {
                     <input
                       id="loan-end"
                       type="date"
-                      className="w-full p-2 border rounded font-hand text-lg"
+                      className="ui-field ui-field-lg font-hand"
                       value={loanForm.end_date}
                       onChange={(event) => setLoanForm({ ...loanForm, end_date: event.target.value })}
                     />
@@ -623,7 +656,7 @@ export const LoansPage = () => {
                     <input
                       id="loan-next-due"
                       type="date"
-                      className="w-full p-2 border rounded font-hand text-lg"
+                      className="ui-field ui-field-lg font-hand"
                       value={loanForm.next_due_date}
                       onChange={(event) => setLoanForm({ ...loanForm, next_due_date: event.target.value })}
                     />
@@ -634,7 +667,7 @@ export const LoansPage = () => {
                     </label>
                     <select
                       id="loan-due-status"
-                      className="w-full p-2 border rounded font-hand text-lg"
+                      className="ui-field ui-field-lg font-hand"
                       value={loanForm.due_status}
                       onChange={(event) => setLoanForm({ ...loanForm, due_status: event.target.value as DueStatus })}
                     >
@@ -646,12 +679,32 @@ export const LoansPage = () => {
                 </div>
 
                 <div>
+                  <label htmlFor="loan-account" className="block text-sm font-bold mb-1">
+                    Linked payment account
+                  </label>
+                  <select
+                    id="loan-account"
+                    className="ui-field ui-field-lg font-hand"
+                    value={loanForm.linked_account_id}
+                    onChange={(event) => setLoanForm({ ...loanForm, linked_account_id: event.target.value })}
+                  >
+                    <option value="">Not linked</option>
+                    {accounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">If linked, each loan payment logs a matching expense transaction.</p>
+                </div>
+
+                <div>
                   <label htmlFor="loan-notes" className="block text-sm font-bold mb-1">
                     {t('loans.notes')}
                   </label>
                   <textarea
                     id="loan-notes"
-                    className="w-full p-2 border rounded font-hand text-lg"
+                    className="ui-field ui-field-lg font-hand"
                     rows={2}
                     placeholder={t('loans.notesPlaceholder')}
                     value={loanForm.notes}
@@ -659,11 +712,11 @@ export const LoansPage = () => {
                   />
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                  <button type="button" onClick={() => setShowModal(false)} className="flex-1 btn bg-gray-100">
+                <div className="app-modal-actions">
+                  <button type="button" onClick={() => setShowModal(false)} className="btn app-modal-btn-secondary">
                     {t('common.cancel')}
                   </button>
-                  <button type="submit" className="flex-1 btn bg-red-500 text-white">
+                  <button type="submit" className="btn app-modal-btn-primary">
                     {editingLoan ? t('common.update') : t('loans.add')}
                   </button>
                 </div>
@@ -672,6 +725,17 @@ export const LoansPage = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ConfirmDialog
+        open={Boolean(pendingDeleteLoanId)}
+        title={t('common.delete')}
+        message={t('loans.deleteConfirm')}
+        destructive
+        onCancel={() => setPendingDeleteLoanId(null)}
+        onConfirm={() => {
+          void confirmDeleteLoan();
+        }}
+      />
     </div>
   );
 };

@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useI18n } from '../contexts/useI18n';
+import { onFinanceDataChanged } from '../services/dataEvents';
+import { ipcClient } from '../services/ipcClient';
 
 interface Report {
   id: string;
@@ -30,25 +33,20 @@ const downloadText = (filename: string, content: string, mime = 'text/plain') =>
 };
 
 export const ReportsPage = () => {
+  const { t } = useI18n();
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [reports, setReports] = useState<Report[]>([]);
   const [selected, setSelected] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
   const [canEditReports, setCanEditReports] = useState(true);
+  const [notice, setNotice] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
 
   const load = useCallback(async () => {
-    if (!window.electron) return;
     setLoading(true);
     try {
       const [data, permission] = await Promise.all([
-        window.electron.invoke('db-get-reports'),
-        window.electron.invoke('db-check-permission', {
-          scopeType: 'module',
-          scopeId: 'reports',
-          subjectType: 'user',
-          subjectId: localStorage.getItem('authUserId') || 'local',
-          requiredRole: 'Editor'
-        }).catch(() => ({ allowed: true }))
+        ipcClient.reports.getAll().catch(() => []),
+        ipcClient.permission.check('reports', 'Editor')
       ]);
       const list = Array.isArray(data) ? data : [];
       setReports(list);
@@ -63,54 +61,84 @@ export const ReportsPage = () => {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const off = onFinanceDataChanged(() => {
+      void load();
+    });
+    return off;
+  }, [load]);
+
   const generate = async () => {
-    if (!window.electron) return;
     try {
-      const report = await window.electron.invoke('db-generate-report', month);
+      const report = await ipcClient.reports.generate(month) as Report | null;
       setSelected(report || null);
-      window.dispatchEvent(new CustomEvent('finance:data-changed'));
+      setNotice({ type: 'success', text: t('reports.notice.generated', { month }) });
       await load();
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Report generation failed.');
+      setNotice({
+        type: 'error',
+        text: error instanceof Error ? error.message : t('reports.notice.generateFailed')
+      });
     }
   };
 
   const exportCsv = async () => {
-    if (!window.electron || !selected) return;
-    const csv = await window.electron.invoke('db-export-report-csv', selected.month);
-    downloadText(`monthly_report_${selected.month}.csv`, csv, 'text/csv');
+    if (!selected) return;
+    try {
+      const csv = await ipcClient.reports.exportCsv(selected.month);
+      downloadText(`monthly_report_${selected.month}.csv`, csv, 'text/csv');
+      setNotice({ type: 'success', text: t('reports.notice.csvExported') });
+    } catch (error) {
+      setNotice({
+        type: 'error',
+        text: error instanceof Error ? error.message : t('reports.notice.csvFailed')
+      });
+    }
   };
 
   const exportPdf = async () => {
-    if (!window.electron || !selected) return;
-    const content = await window.electron.invoke('db-export-report-pdf-content', selected.month);
-    downloadText(`monthly_report_${selected.month}.pdf`, content, 'application/pdf');
+    if (!selected) return;
+    try {
+      const content = await ipcClient.reports.exportPdf(selected.month);
+      downloadText(`monthly_report_${selected.month}.pdf`, content, 'application/pdf');
+      setNotice({ type: 'success', text: t('reports.notice.pdfExported') });
+    } catch (error) {
+      setNotice({
+        type: 'error',
+        text: error instanceof Error ? error.message : t('reports.notice.pdfFailed')
+      });
+    }
   };
 
   return (
-    <div className="h-full flex flex-col gap-4 overflow-hidden">
+    <div className="reports-page flex flex-col gap-4 min-h-0 pb-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-3xl font-bold font-heading">Monthly Reports</h2>
+        <h2 className="text-3xl font-bold font-heading">{t('reports.title')}</h2>
       </div>
 
       <div className="card flex flex-wrap gap-3 items-end">
         <div>
-          <label htmlFor="report-month" className="block text-sm font-bold mb-1">Month</label>
+          <label htmlFor="report-month" className="block text-sm font-bold mb-1">{t('reports.month')}</label>
           <input id="report-month" type="month" className="p-2 border rounded" value={month} onChange={(e) => setMonth(e.target.value)} />
         </div>
-        <button className="btn bg-blue-500 text-white" onClick={generate} disabled={!canEditReports}>Generate from Settled Month</button>
-        <button className="btn bg-green-500 text-white" onClick={exportCsv} disabled={!selected || !canEditReports}>Export CSV</button>
-        <button className="btn bg-indigo-500 text-white" onClick={exportPdf} disabled={!selected || !canEditReports}>Export PDF</button>
+        <button className="btn bg-blue-500 text-white" onClick={generate} disabled={!canEditReports}>{t('reports.generate')}</button>
+        <button className="btn bg-green-500 text-white" onClick={exportCsv} disabled={!selected || !canEditReports}>{t('reports.exportCsv')}</button>
+        <button className="btn bg-indigo-500 text-white" onClick={exportPdf} disabled={!selected || !canEditReports}>{t('reports.exportPdf')}</button>
         {!canEditReports && (
-          <span className="text-xs text-red-600 font-semibold">Report actions are disabled by permissions.</span>
+          <span className="text-xs text-red-600 font-semibold">{t('reports.permissionsDisabled')}</span>
+        )}
+        {notice && (
+          <span className={`text-xs font-semibold ${notice.type === 'error' ? 'text-red-600' : 'text-green-700'}`}>
+            {notice.text}
+          </span>
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full">
-        <div className="card lg:col-span-1 overflow-y-auto">
-          <h3 className="text-xl font-bold mb-2">Available Reports</h3>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-[26rem]">
+        <div className="card lg:col-span-1 overflow-y-auto min-h-[18rem]">
+          <h3 className="text-xl font-bold mb-2">{t('reports.available')}</h3>
           {loading ? (
-            <div>Loading...</div>
+            <div>{t('common.loading')}</div>
           ) : (
             <div className="space-y-2">
               {reports.map((report) => (
@@ -120,75 +148,81 @@ export const ReportsPage = () => {
                   onClick={() => setSelected(report)}
                 >
                   <div className="font-bold">{report.month}</div>
-                  <div className="text-xs text-gray-500">Generated: {report.generated_at ? new Date(report.generated_at).toLocaleString() : 'n/a'}</div>
+                  <div className="text-xs text-gray-500">
+                    {t('reports.generatedAt')}: {report.generated_at ? new Date(report.generated_at).toLocaleString() : t('common.notAvailable')}
+                  </div>
                 </button>
               ))}
 
-              {reports.length === 0 && <div className="text-sm text-gray-500">No reports yet.</div>}
+              {reports.length === 0 && <div className="text-sm text-gray-500">{t('reports.none')}</div>}
             </div>
           )}
         </div>
 
-        <div className="card lg:col-span-2 overflow-y-auto">
-          <h3 className="text-xl font-bold mb-2">Report Detail</h3>
+        <div className="card lg:col-span-2 overflow-y-auto min-h-[18rem]">
+          <h3 className="text-xl font-bold mb-2">{t('reports.detail')}</h3>
           {!selected ? (
-            <div className="text-sm text-gray-500">Select a report to view details.</div>
+            <div className="text-sm text-gray-500">{t('reports.selectHint')}</div>
           ) : (
             <div className="space-y-4 text-sm">
               <div className="grid grid-cols-3 gap-3">
                 <div className="p-3 rounded border bg-green-50">
-                  <div className="text-xs text-gray-500">Income</div>
+                  <div className="text-xs text-gray-500">{t('reports.income')}</div>
                   <div className="text-lg font-bold">{Number(selected.snapshot_data?.cashFlow?.income || 0).toFixed(2)}</div>
                 </div>
                 <div className="p-3 rounded border bg-red-50">
-                  <div className="text-xs text-gray-500">Expense</div>
+                  <div className="text-xs text-gray-500">{t('reports.expense')}</div>
                   <div className="text-lg font-bold">{Number(selected.snapshot_data?.cashFlow?.expense || 0).toFixed(2)}</div>
                 </div>
                 <div className="p-3 rounded border bg-blue-50">
-                  <div className="text-xs text-gray-500">Net</div>
+                  <div className="text-xs text-gray-500">{t('reports.net')}</div>
                   <div className="text-lg font-bold">{Number(selected.snapshot_data?.cashFlow?.net || 0).toFixed(2)}</div>
                 </div>
               </div>
 
               <div>
-                <h4 className="font-bold mb-1">Actual vs Budget</h4>
+                <h4 className="font-bold mb-1">{t('reports.actualVsBudget')}</h4>
                 <div className="space-y-1">
                   {(selected.snapshot_data?.actualVsBudget || []).map((row, idx) => (
                     <div key={idx} className="flex justify-between border rounded p-2">
                       <span>{row.categoryName}</span>
-                      <span>Limit {Number(row.limitAmount || 0).toFixed(2)} | Spent {Number(row.spent || 0).toFixed(2)} | Variance {Number(row.variance || 0).toFixed(2)}</span>
+                      <span>
+                        {t('reports.limit')} {Number(row.limitAmount || 0).toFixed(2)} | {t('reports.spent')} {Number(row.spent || 0).toFixed(2)} | {t('reports.variance')} {Number(row.variance || 0).toFixed(2)}
+                      </span>
                     </div>
                   ))}
-                  {(selected.snapshot_data?.actualVsBudget || []).length === 0 && <div className="text-gray-500">No budget rows.</div>}
+                  {(selected.snapshot_data?.actualVsBudget || []).length === 0 && <div className="text-gray-500">{t('reports.noBudgetRows')}</div>}
                 </div>
               </div>
 
               <div>
-                <h4 className="font-bold mb-1">Goal Progress</h4>
+                <h4 className="font-bold mb-1">{t('reports.goalProgress')}</h4>
                 <div className="space-y-1">
                   {(selected.snapshot_data?.goalProgress || []).map((goal, idx) => (
                     <div key={idx} className="flex justify-between border rounded p-2">
-                      <span>{goal.name} ({goal.goal_type || 'standard'})</span>
-                      <span>{Number(goal.current_amount || 0).toFixed(2)} / {Number(goal.target_amount || 0).toFixed(2)} ({goal.risk_status || 'normal'})</span>
+                      <span>{goal.name} ({goal.goal_type || t('reports.standard')})</span>
+                      <span>{Number(goal.current_amount || 0).toFixed(2)} / {Number(goal.target_amount || 0).toFixed(2)} ({goal.risk_status || t('reports.normal')})</span>
                     </div>
                   ))}
                 </div>
               </div>
 
               <div>
-                <h4 className="font-bold mb-1">Loan Status</h4>
+                <h4 className="font-bold mb-1">{t('reports.loanStatus')}</h4>
                 <div className="space-y-1">
                   {(selected.snapshot_data?.loanStatus || []).map((loan, idx) => (
                     <div key={idx} className="flex justify-between border rounded p-2">
                       <span>{loan.name}</span>
-                      <span>Balance {Number(loan.current_balance || 0).toFixed(2)} | Due {loan.next_due_date || 'n/a'} ({loan.due_status || 'upcoming'})</span>
+                      <span>
+                        {t('reports.balance')} {Number(loan.current_balance || 0).toFixed(2)} | {t('reports.due')} {loan.next_due_date || t('common.notAvailable')} ({loan.due_status || t('reports.upcoming')})
+                      </span>
                     </div>
                   ))}
                 </div>
               </div>
 
               <div>
-                <h4 className="font-bold mb-1">Risk Notes</h4>
+                <h4 className="font-bold mb-1">{t('reports.riskNotes')}</h4>
                 <ul className="list-disc ml-5">
                   {(selected.snapshot_data?.riskNotes || []).map((note, idx) => (
                     <li key={idx}>{note}</li>

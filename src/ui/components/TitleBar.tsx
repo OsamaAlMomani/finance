@@ -6,29 +6,12 @@ import { BrandBadge } from './BrandBadge';
 export const TitleBar = ({ userName }: { userName?: string }) => {
   const { t } = useI18n();
   const [isMaximized, setIsMaximized] = useState(false);
-  const [loadedName, setLoadedName] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
     if (!window.electron?.windowControl) return;
     window.electron.windowControl.isMaximized().then(setIsMaximized);
   }, []);
-
-  useEffect(() => {
-    if (userName) return undefined;
-
-    const loadUserName = async () => {
-      if (!window.electron?.invoke) return;
-      const data = await window.electron.invoke('user-get-all');
-      const authUserId = localStorage.getItem('authUserId');
-      const user = data?.users?.find((u: { id: string; name: string }) => u.id === authUserId)
-        || data?.users?.find((u: { id: string; name: string }) => u.id === data?.activeUserId);
-      if (user?.name) setLoadedName(user.name);
-    };
-
-    loadUserName();
-    return undefined;
-  }, [userName]);
 
   useEffect(() => {
     if (!helpOpen) return undefined;
@@ -50,7 +33,7 @@ export const TitleBar = ({ userName }: { userName?: string }) => {
     <div className="titlebar">
       <div className="titlebar-drag">
         <BrandBadge compact className="titlebar-brand-mini" showTagline={false} />
-        <div className="titlebar-user">{userName || loadedName || t('titlebar.userFallback')}</div>
+        <div className="titlebar-user">{userName || t('titlebar.userFallback')}</div>
       </div>
 
       <div className="titlebar-controls">
@@ -93,10 +76,6 @@ export const TitleBar = ({ userName }: { userName?: string }) => {
               <div className="titlebar-help-item" role="listitem">
                 <span>{t('help.plans.title')}</span>
                 <small>{t('help.plans.desc')}</small>
-              </div>
-              <div className="titlebar-help-item" role="listitem">
-                <span>{t('help.users.title')}</span>
-                <small>{t('help.users.desc')}</small>
               </div>
               <div className="titlebar-help-item" role="listitem">
                 <span>{t('help.importExport.title')}</span>
