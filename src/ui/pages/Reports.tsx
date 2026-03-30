@@ -111,24 +111,32 @@ export const ReportsPage = () => {
   };
 
   return (
-    <div className="reports-page flex flex-col gap-4 min-h-0 pb-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-3xl font-bold font-heading">{t('reports.title')}</h2>
+    <div className="reports-page page-shell min-h-0 pb-6">
+      <div className="page-hero">
+        <div className="page-copy">
+          <p className="page-eyebrow">{t('sidebar.domain.analysis')}</p>
+          <h2 className="page-title heading-font">{t('reports.title')}</h2>
+          <p className="page-subtitle">{t('reports.subtitle')}</p>
+        </div>
       </div>
 
-      <div className="card flex flex-wrap gap-3 items-end">
+      <div className="card reports-toolbar-card">
         <div>
-          <label htmlFor="report-month" className="block text-sm font-bold mb-1">{t('reports.month')}</label>
-          <input id="report-month" type="month" className="p-2 border rounded" value={month} onChange={(e) => setMonth(e.target.value)} />
+          <label htmlFor="report-month" className="block mb-2">{t('reports.month')}</label>
+          <input id="report-month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
         </div>
-        <button className="btn bg-blue-500 text-white" onClick={generate} disabled={!canEditReports}>{t('reports.generate')}</button>
-        <button className="btn bg-green-500 text-white" onClick={exportCsv} disabled={!selected || !canEditReports}>{t('reports.exportCsv')}</button>
-        <button className="btn bg-indigo-500 text-white" onClick={exportPdf} disabled={!selected || !canEditReports}>{t('reports.exportPdf')}</button>
+
+        <div className="page-actions">
+          <button className="btn bg-blue-500 text-white" onClick={generate} disabled={!canEditReports}>{t('reports.generate')}</button>
+          <button className="btn bg-green-500 text-white" onClick={exportCsv} disabled={!selected || !canEditReports}>{t('reports.exportCsv')}</button>
+          <button className="btn bg-indigo-500 text-white" onClick={exportPdf} disabled={!selected || !canEditReports}>{t('reports.exportPdf')}</button>
+        </div>
+
         {!canEditReports && (
-          <span className="text-xs text-red-600 font-semibold">{t('reports.permissionsDisabled')}</span>
+          <span className="reports-notice is-error">{t('reports.permissionsDisabled')}</span>
         )}
         {notice && (
-          <span className={`text-xs font-semibold ${notice.type === 'error' ? 'text-red-600' : 'text-green-700'}`}>
+          <span className={`reports-notice ${notice.type === 'error' ? 'is-error' : 'is-success'}`}>
             {notice.text}
           </span>
         )}
@@ -144,7 +152,7 @@ export const ReportsPage = () => {
               {reports.map((report) => (
                 <button
                   key={report.id}
-                  className={`w-full text-left p-3 border rounded ${selected?.id === report.id ? 'bg-blue-50 border-blue-300' : 'bg-white'}`}
+                  className={`reports-list-button ${selected?.id === report.id ? 'is-active' : ''}`}
                   onClick={() => setSelected(report)}
                 >
                   <div className="font-bold">{report.month}</div>
@@ -165,26 +173,26 @@ export const ReportsPage = () => {
             <div className="text-sm text-gray-500">{t('reports.selectHint')}</div>
           ) : (
             <div className="space-y-4 text-sm">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="p-3 rounded border bg-green-50">
+              <div className="reports-metrics-grid">
+                <div className="reports-metric-card bg-green-50">
                   <div className="text-xs text-gray-500">{t('reports.income')}</div>
-                  <div className="text-lg font-bold">{Number(selected.snapshot_data?.cashFlow?.income || 0).toFixed(2)}</div>
+                  <strong>{Number(selected.snapshot_data?.cashFlow?.income || 0).toFixed(2)}</strong>
                 </div>
-                <div className="p-3 rounded border bg-red-50">
+                <div className="reports-metric-card bg-red-50">
                   <div className="text-xs text-gray-500">{t('reports.expense')}</div>
-                  <div className="text-lg font-bold">{Number(selected.snapshot_data?.cashFlow?.expense || 0).toFixed(2)}</div>
+                  <strong>{Number(selected.snapshot_data?.cashFlow?.expense || 0).toFixed(2)}</strong>
                 </div>
-                <div className="p-3 rounded border bg-blue-50">
+                <div className="reports-metric-card bg-blue-50">
                   <div className="text-xs text-gray-500">{t('reports.net')}</div>
-                  <div className="text-lg font-bold">{Number(selected.snapshot_data?.cashFlow?.net || 0).toFixed(2)}</div>
+                  <strong>{Number(selected.snapshot_data?.cashFlow?.net || 0).toFixed(2)}</strong>
                 </div>
               </div>
 
-              <div>
+              <div className="reports-detail-section">
                 <h4 className="font-bold mb-1">{t('reports.actualVsBudget')}</h4>
                 <div className="space-y-1">
                   {(selected.snapshot_data?.actualVsBudget || []).map((row, idx) => (
-                    <div key={idx} className="flex justify-between border rounded p-2">
+                    <div key={idx} className="reports-detail-row">
                       <span>{row.categoryName}</span>
                       <span>
                         {t('reports.limit')} {Number(row.limitAmount || 0).toFixed(2)} | {t('reports.spent')} {Number(row.spent || 0).toFixed(2)} | {t('reports.variance')} {Number(row.variance || 0).toFixed(2)}
@@ -195,11 +203,11 @@ export const ReportsPage = () => {
                 </div>
               </div>
 
-              <div>
+              <div className="reports-detail-section">
                 <h4 className="font-bold mb-1">{t('reports.goalProgress')}</h4>
                 <div className="space-y-1">
                   {(selected.snapshot_data?.goalProgress || []).map((goal, idx) => (
-                    <div key={idx} className="flex justify-between border rounded p-2">
+                    <div key={idx} className="reports-detail-row">
                       <span>{goal.name} ({goal.goal_type || t('reports.standard')})</span>
                       <span>{Number(goal.current_amount || 0).toFixed(2)} / {Number(goal.target_amount || 0).toFixed(2)} ({goal.risk_status || t('reports.normal')})</span>
                     </div>
@@ -207,11 +215,11 @@ export const ReportsPage = () => {
                 </div>
               </div>
 
-              <div>
+              <div className="reports-detail-section">
                 <h4 className="font-bold mb-1">{t('reports.loanStatus')}</h4>
                 <div className="space-y-1">
                   {(selected.snapshot_data?.loanStatus || []).map((loan, idx) => (
-                    <div key={idx} className="flex justify-between border rounded p-2">
+                    <div key={idx} className="reports-detail-row">
                       <span>{loan.name}</span>
                       <span>
                         {t('reports.balance')} {Number(loan.current_balance || 0).toFixed(2)} | {t('reports.due')} {loan.next_due_date || t('common.notAvailable')} ({loan.due_status || t('reports.upcoming')})

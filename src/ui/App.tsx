@@ -3,7 +3,6 @@ import { HashRouter, Routes, Route } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
 import { applyTheme } from './utils/theme';
-import { SystemStateBar } from './components/SystemStateBar';
 import { useI18n } from './contexts/useI18n';
 import { applyStoredLabCssForProfile, clearLabCssFromDom } from './utils/labStyle';
 
@@ -227,7 +226,6 @@ const App = () => {
           <div className="app-body">
             <Sidebar />
             <main className="main-content">
-              <SystemStateBar />
               <div className="route-workspace">
                 <Suspense fallback={<div className="card p-6 text-center">{t('common.loading')}</div>}>
                   <Routes>

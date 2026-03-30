@@ -204,19 +204,39 @@ export const GoalsPage = () => {
         loadGoals();
     };
 
+    const linkedProgressAccountName = progressGoal?.linked_account_id
+        ? accounts.find((account) => account.id === progressGoal.linked_account_id)?.name || progressGoal.linked_account_id
+        : '';
+    const resolveAccountName = (accountId?: string | null) =>
+        accountId ? accounts.find((account) => account.id === accountId)?.name || accountId : '';
+    const humanizeGoalToken = (value?: string | null, fallback = 'manual') =>
+        String(value || fallback).replace(/_/g, ' ');
+
     return (
-        <div className="h-full min-h-0 flex flex-col overflow-hidden">
-            <div className="flex justify-between items-center mb-6">
-                <h2 className="text-3xl font-bold font-heading">{t('goals.title')}</h2>
-                <button onClick={() => handleOpenModal()} className="btn bg-purple-500 text-white flex items-center gap-2">
-                    <Plus size={20} /> {t('goals.add')}
-                </button>
+        <div className="goals-page page-shell h-full min-h-0 flex flex-col overflow-hidden pb-6">
+            <div className="page-hero">
+                <div className="page-copy">
+                    <p className="page-eyebrow">{t('sidebar.domain.money')}</p>
+                    <h2 className="page-title heading-font">{t('goals.title')}</h2>
+                    <div className="page-chip-row">
+                        <span className="page-chip">🎯 {goals.length} goals</span>
+                        <span className="page-chip">🏦 {goals.filter((goal) => Boolean(goal.linked_account_id)).length} linked</span>
+                        <span className="page-chip">✨ {contributions.length} moves</span>
+                    </div>
+                </div>
+
+                <div className="page-actions">
+                    <button onClick={() => handleOpenModal()} className="btn bg-purple-500 text-white flex items-center gap-2">
+                        <Plus size={20} /> {t('goals.add')}
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 flex-1 min-h-0 overflow-y-auto pr-1">
                 {goals.map(g => {
                     const percent = Math.min((g.current_amount / g.target_amount) * 100, 100);
                     const goalContribs = contributions.filter((entry) => entry.goal_id === g.id).slice(0, 3);
+                    const linkedAccountName = resolveAccountName(g.linked_account_id);
                     return (
                         <div key={g.id} className="card border-t-8 border-purple-400 group relative">
                              <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -250,10 +270,12 @@ export const GoalsPage = () => {
                                 </span>
                              </div>
 
-                             <div className="text-xs text-gray-500 mb-2">
-                                <span className="font-semibold">Type:</span> {g.goal_type || 'standard'} | <span className="font-semibold">Priority:</span> {g.priority || 'medium'}
-                                <br />
-                                <span className="font-semibold">Funding:</span> {g.funding_source || 'manual'} | <span className="font-semibold">Risk:</span> {g.risk_status || 'normal'}
+                             <div className="goal-meta-row">
+                                <span className="goal-meta-chip">🎯 {humanizeGoalToken(g.goal_type, 'standard')}</span>
+                                <span className="goal-meta-chip">⚡ {humanizeGoalToken(g.priority, 'medium')}</span>
+                                <span className="goal-meta-chip">💸 {humanizeGoalToken(g.funding_source, 'manual')}</span>
+                                <span className="goal-meta-chip">🛡️ {humanizeGoalToken(g.risk_status, 'normal')}</span>
+                                {linkedAccountName && <span className="goal-meta-chip accent">🏦 {linkedAccountName}</span>}
                              </div>
 
                              <progress
@@ -277,16 +299,16 @@ export const GoalsPage = () => {
                                 onClick={() => handleOpenProgressModal(g)}
                                 className="w-full btn btn-sm bg-purple-100 text-purple-600 flex items-center justify-center gap-2"
                              >
-                                          <TrendingUp size={16} /> {t('goals.addProgress')}
+                                          <TrendingUp size={16} /> ✨ {t('goals.addProgress')}
                              </button>
 
                              <div className="mt-3 text-xs text-gray-600">
-                                <p className="font-bold">Recent contributions</p>
+                                <p className="goal-section-label">✨ Recent moves</p>
                                 <ul className="list-disc ml-4">
                                   {goalContribs.map((entry) => (
                                     <li key={entry.id}>{Number(entry.amount).toFixed(2)} on {entry.date}</li>
                                   ))}
-                                  {goalContribs.length === 0 && <li>No contributions yet</li>}
+                                  {goalContribs.length === 0 && <li>No moves yet</li>}
                                 </ul>
                              </div>
                         </div>
@@ -365,6 +387,9 @@ export const GoalsPage = () => {
                                             </option>
                                         ))}
                                     </select>
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        {t('goals.linkedAccountHelp')}
+                                    </p>
                                 </div>
                                 <div>
                                     <label htmlFor="goal-type" className="text-xs font-bold text-gray-500">Goal Type</label>
@@ -459,6 +484,11 @@ export const GoalsPage = () => {
                                         {t('goals.newTotal', { amount: (progressGoal.current_amount + parseFloat(progressAmount || '0')).toFixed(2) })}
                                     </p>
                                 )}
+                                <p className="text-xs text-gray-500 mt-2">
+                                    {progressGoal.linked_account_id
+                                        ? t('goals.linkedAccountProgressHint', { account: linkedProgressAccountName })
+                                        : t('goals.linkedAccountProgressMissing')}
+                                </p>
                             </div>
                             <div className="flex gap-2">
                                 <button

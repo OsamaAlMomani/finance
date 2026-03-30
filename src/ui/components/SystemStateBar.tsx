@@ -100,7 +100,7 @@ export const SystemStateBar = () => {
     <section className="system-state-bar card mb-4">
       <div className="system-state-top">
         <div className="system-state-header-left">
-          <h3 className="system-state-title">{t('systemState.title')}</h3>
+          <span className="sr-only">{t('systemState.title')}</span>
           <button
             type="button"
             className="system-state-heart-btn"

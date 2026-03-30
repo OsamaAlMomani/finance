@@ -12,11 +12,13 @@ export const BrandBadge = ({ compact = false, className = '', showTagline = true
 
   return (
     <div className={`brand-badge ${compact ? 'brand-badge-compact' : ''} ${className}`.trim()}>
-      <img
-        src={brandMarkSrc}
-        alt={t('app.aboutTitle')}
-        className="brand-badge-mark"
-      />
+      <span className="brand-badge-mark-wrap" aria-hidden="true">
+        <img
+          src={brandMarkSrc}
+          alt={t('app.aboutTitle')}
+          className="brand-badge-mark"
+        />
+      </span>
       <div className="brand-badge-copy">
         <div className="brand-badge-title">
           <span>{t('app.brand')}</span>

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useI18n } from '../contexts/useI18n';
+import { BrandBadge } from './BrandBadge';
 
 const MOBILE_BREAKPOINT = 1024;
 
@@ -33,21 +34,52 @@ interface SidebarNavItem {
   icon: LucideIcon;
 }
 
-const MAIN_LINKS: SidebarNavItem[] = [
-  { to: '/', labelKey: 'sidebar.dashboard', icon: LayoutDashboard },
-  { to: '/transactions', labelKey: 'sidebar.transactions', icon: Receipt },
-  { to: '/accounts', labelKey: 'sidebar.accounts', icon: Wallet },
-  { to: '/budget', labelKey: 'sidebar.budget', icon: PiggyBank },
-  { to: '/goals', labelKey: 'sidebar.goals', icon: Target },
-  { to: '/bills', labelKey: 'sidebar.bills', icon: CalendarDays },
-  { to: '/loans', labelKey: 'sidebar.loans', icon: CreditCard },
-  { to: '/plans', labelKey: 'sidebar.plans', icon: ClipboardList },
-  { to: '/scenarios', labelKey: 'sidebar.scenarios', icon: LineChart },
-  { to: '/alerts', labelKey: 'sidebar.alerts', icon: AlertTriangle },
-  { to: '/settlement', labelKey: 'sidebar.settlement', icon: Scale },
-  { to: '/reports', labelKey: 'sidebar.reports', icon: FileChartColumn },
-  { to: '/sharing', labelKey: 'sidebar.sharing', icon: Share2 },
-  { to: '/import-export', labelKey: 'sidebar.importExport', icon: FileUp }
+interface SidebarNavGroup {
+  titleKey: string;
+  items: SidebarNavItem[];
+}
+
+const NAV_GROUPS: SidebarNavGroup[] = [
+  {
+    titleKey: 'sidebar.domain.dashboard',
+    items: [{ to: '/', labelKey: 'sidebar.dashboard', icon: LayoutDashboard }]
+  },
+  {
+    titleKey: 'sidebar.domain.money',
+    items: [
+      { to: '/transactions', labelKey: 'sidebar.transactions', icon: Receipt },
+      { to: '/accounts', labelKey: 'sidebar.accounts', icon: Wallet },
+      { to: '/budget', labelKey: 'sidebar.budget', icon: PiggyBank },
+      { to: '/bills', labelKey: 'sidebar.bills', icon: CalendarDays },
+      { to: '/loans', labelKey: 'sidebar.loans', icon: CreditCard }
+    ]
+  },
+  {
+    titleKey: 'sidebar.domain.planning',
+    items: [
+      { to: '/goals', labelKey: 'sidebar.goals', icon: Target },
+      { to: '/plans', labelKey: 'sidebar.plans', icon: ClipboardList },
+      { to: '/scenarios', labelKey: 'sidebar.scenarios', icon: LineChart }
+    ]
+  },
+  {
+    titleKey: 'sidebar.domain.alerts',
+    items: [
+      { to: '/alerts', labelKey: 'sidebar.alerts', icon: AlertTriangle },
+      { to: '/settlement', labelKey: 'sidebar.settlement', icon: Scale }
+    ]
+  },
+  {
+    titleKey: 'sidebar.domain.analysis',
+    items: [{ to: '/reports', labelKey: 'sidebar.reports', icon: FileChartColumn }]
+  },
+  {
+    titleKey: 'sidebar.domain.sharing',
+    items: [
+      { to: '/sharing', labelKey: 'sidebar.sharing', icon: Share2 },
+      { to: '/import-export', labelKey: 'sidebar.importExport', icon: FileUp }
+    ]
+  }
 ];
 
 const FOOTER_LINKS: SidebarNavItem[] = [{ to: '/settings', labelKey: 'sidebar.settings', icon: Settings }];
@@ -93,7 +125,11 @@ export const Sidebar = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.22, delay: index * 0.03 }}
       >
-        <NavLink to={item.to} className="sidebar-nav-link" onClick={closeMobileIfNeeded}>
+        <NavLink
+          to={item.to}
+          className={({ isActive }) => `sidebar-nav-link ${isActive ? 'active' : ''}`}
+          onClick={closeMobileIfNeeded}
+        >
           <motion.span
             className="inline-flex"
             whileHover={{ rotate: isMobile ? 0 : -6 }}
@@ -117,6 +153,15 @@ export const Sidebar = () => {
       </motion.div>
     );
   };
+
+  const renderGroup = (group: SidebarNavGroup, groupIndex: number) => (
+    <section key={group.titleKey} className="sidebar-section">
+      {shouldShowLabels && <p className="sidebar-section-label">{t(group.titleKey)}</p>}
+      <div className="sidebar-nav-stack">
+        {group.items.map((item, itemIndex) => renderNavLink(item, groupIndex * 10 + itemIndex))}
+      </div>
+    </section>
+  );
 
   return (
     <>
@@ -162,7 +207,7 @@ export const Sidebar = () => {
         animate={
           isMobile
             ? { x: mobileOpen ? 0 : mobileHiddenX, opacity: mobileOpen ? 1 : 0.98 }
-            : { x: 0, width: collapsed ? 84 : 280, opacity: 1 }
+            : { x: 0, width: collapsed ? 96 : 304, opacity: 1 }
         }
         transition={
           isMobile
@@ -197,31 +242,20 @@ export const Sidebar = () => {
           {isMobile ? <X size={16} /> : collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </motion.button>
 
-        <motion.div className="mb-8 p-2 text-center" initial={false} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-2xl font-bold font-heading heading-font">
-            <span className="brand-icon">{t('app.brandIcon') || '💰'}</span>
-            <motion.span
-              className="brand-text inline-block overflow-hidden whitespace-nowrap"
-              initial={false}
-              animate={
-                shouldShowLabels
-                  ? { width: 'auto', opacity: 1, x: 0 }
-                  : { width: 0, opacity: 0, x: collapsedLabelOffset }
-              }
-              transition={{ duration: 0.18, ease: 'easeOut' }}
-            >
-              {t('app.brand')}{' '}
-              <span className="text-theme-primary">{t('app.brandSuffix')}</span>
-            </motion.span>
-          </h1>
+        <motion.div className="sidebar-brand-shell" initial={false} animate={{ opacity: 1, y: 0 }}>
+          <BrandBadge
+            compact={!shouldShowLabels}
+            className={`sidebar-brand ${shouldShowLabels ? '' : 'sidebar-brand-collapsed'}`}
+            showTagline={shouldShowLabels}
+          />
         </motion.div>
 
-        <nav className="flex-1">
-          {MAIN_LINKS.map(renderNavLink)}
+        <nav className="sidebar-nav">
+          {NAV_GROUPS.map(renderGroup)}
         </nav>
 
-        <div className="mt-auto">
-          {FOOTER_LINKS.map((item, index) => renderNavLink(item, MAIN_LINKS.length + index))}
+        <div className="sidebar-footer">
+          {FOOTER_LINKS.map((item, index) => renderNavLink(item, NAV_GROUPS.length * 10 + index))}
         </div>
       </motion.aside>
     </>

@@ -95,8 +95,10 @@ export const ipcClient = {
   },
 
   dashboard: {
-    getOptimization: (periodDays = 90) =>
-      invoke('db-get-dashboard-optimization', { periodDays }, viewerContext('dashboard'))
+    getOptimization: (options: { periodDays?: number; month?: string } | number = 90) => {
+      const normalizedOptions = typeof options === 'number' ? { periodDays: options } : options;
+      return invoke('db-get-dashboard-optimization', normalizedOptions, viewerContext('dashboard'));
+    }
   },
 
   accounts: {

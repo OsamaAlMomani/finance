@@ -19,6 +19,7 @@ Release/
 release/
 Archive/
 archive/
+release.7z
 
 # Editor directories and files
 .vscode/*

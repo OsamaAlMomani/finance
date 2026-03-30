@@ -1,88 +1,38 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
   <title id="title">Stock Tracker Mark</title>
-  <desc id="desc">Shield icon with market bars, dollar coin and upward arrow.</desc>
+  <desc id="desc">Premium blue budget ledger mark with a rising trend line.</desc>
   <defs>
-    <linearGradient id="bgGlow" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0a1b4f"/>
-      <stop offset="100%" stop-color="#020712"/>
+    <linearGradient id="markBase" x1="12%" y1="10%" x2="88%" y2="92%">
+      <stop offset="0%" stop-color="#1f57f3"/>
+      <stop offset="55%" stop-color="#3f86ff"/>
+      <stop offset="100%" stop-color="#7bc5ff"/>
     </linearGradient>
-    <radialGradient id="aura" cx="50%" cy="45%" r="52%">
-      <stop offset="0%" stop-color="#37b2ff" stop-opacity="0.95"/>
-      <stop offset="100%" stop-color="#37b2ff" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="shieldEdge" x1="8%" y1="4%" x2="92%" y2="96%">
-      <stop offset="0%" stop-color="#f8fbff"/>
-      <stop offset="45%" stop-color="#b6c5e4"/>
-      <stop offset="100%" stop-color="#8798bd"/>
+    <linearGradient id="cardFace" x1="18%" y1="8%" x2="82%" y2="92%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.96"/>
+      <stop offset="100%" stop-color="#ecf4ff" stop-opacity="0.88"/>
     </linearGradient>
-    <linearGradient id="shieldInner" x1="12%" y1="8%" x2="88%" y2="92%">
-      <stop offset="0%" stop-color="#123a9d"/>
-      <stop offset="52%" stop-color="#0a2976"/>
-      <stop offset="100%" stop-color="#071f56"/>
+    <linearGradient id="trendStroke" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#255af6"/>
+      <stop offset="100%" stop-color="#63b7ff"/>
     </linearGradient>
-    <linearGradient id="barA" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#46a7ff"/>
-      <stop offset="100%" stop-color="#1d55c7"/>
-    </linearGradient>
-    <linearGradient id="barB" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#2f8bff"/>
-      <stop offset="100%" stop-color="#143d9d"/>
-    </linearGradient>
-    <linearGradient id="coinFill" x1="20%" y1="18%" x2="82%" y2="85%">
-      <stop offset="0%" stop-color="#2fc6ff"/>
-      <stop offset="100%" stop-color="#1468da"/>
-    </linearGradient>
-    <linearGradient id="coinEdge" x1="8%" y1="0%" x2="92%" y2="100%">
-      <stop offset="0%" stop-color="#f1f6ff"/>
-      <stop offset="100%" stop-color="#a9b8d9"/>
-    </linearGradient>
-    <linearGradient id="arrowFill" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="45%" stop-color="#d7e3ff"/>
-      <stop offset="100%" stop-color="#9eaecf"/>
-    </linearGradient>
-    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="5.5" result="blur"/>
-      <feColorMatrix in="blur" type="matrix" values="
-        0 0 0 0 0.17
-        0 0 0 0 0.72
-        0 0 0 0 1
-        0 0 0 0.68 0" result="glow"/>
-      <feMerge>
-        <feMergeNode in="glow"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="20" stdDeviation="20" flood-color="#255af6" flood-opacity="0.16"/>
     </filter>
-    <clipPath id="shieldClip">
-      <path d="M256 66L402 134L379 338L256 438L133 338L110 134Z"/>
-    </clipPath>
   </defs>
 
-  <rect width="512" height="512" fill="url(#bgGlow)"/>
-  <ellipse cx="256" cy="252" rx="218" ry="212" fill="url(#aura)" opacity="0.8"/>
+  <rect width="512" height="512" rx="132" fill="url(#markBase)"/>
+  <rect x="48" y="42" width="416" height="424" rx="116" fill="rgba(255,255,255,0.08)"/>
 
-  <g filter="url(#softGlow)">
-    <path d="M256 28L442 114L412 358L256 486L100 358L70 114Z" fill="url(#shieldEdge)"/>
-    <path d="M256 66L402 134L379 338L256 438L133 338L110 134Z" fill="url(#shieldInner)"/>
-
-    <g clip-path="url(#shieldClip)">
-      <rect x="124" y="270" width="48" height="180" fill="url(#barB)" opacity="0.85"/>
-      <rect x="176" y="246" width="48" height="204" fill="url(#barA)" opacity="0.9"/>
-      <rect x="228" y="222" width="48" height="228" fill="url(#barB)" opacity="0.93"/>
-      <rect x="280" y="250" width="48" height="200" fill="url(#barA)" opacity="0.88"/>
-      <rect x="332" y="274" width="48" height="176" fill="url(#barB)" opacity="0.82"/>
-    </g>
-
-    <circle cx="256" cy="218" r="86" fill="url(#coinEdge)"/>
-    <circle cx="256" cy="218" r="74" fill="url(#coinFill)"/>
-    <text x="256" y="250" text-anchor="middle" font-family="'Segoe UI Black', 'Arial Black', sans-serif" font-size="116" fill="#eef4ff">$</text>
-
-    <path
-      d="M112 344C176 300 242 267 308 238L308 188L444 256L308 324L308 274C250 301 180 334 112 368Z"
-      fill="url(#arrowFill)"
-      stroke="#7688b3"
-      stroke-width="5"
-      stroke-linejoin="round"
-    />
+  <g filter="url(#softShadow)">
+    <rect x="74" y="66" width="364" height="380" rx="92" fill="url(#cardFace)" stroke="#d7e4ff" stroke-width="3"/>
+    <rect x="122" y="122" width="204" height="34" rx="17" fill="#dce8ff"/>
+    <rect x="122" y="188" width="116" height="16" rx="8" fill="#d8e5ff"/>
+    <rect x="122" y="230" width="164" height="16" rx="8" fill="#d8e5ff"/>
+    <rect x="122" y="272" width="132" height="16" rx="8" fill="#d8e5ff"/>
+    <path d="M132 298L196 254L256 272L320 214L374 174" fill="none" stroke="url(#trendStroke)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M334 174H394V234" fill="none" stroke="url(#trendStroke)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="196" cy="254" r="18" fill="#ffffff" stroke="#9bc7ff" stroke-width="8"/>
+    <circle cx="256" cy="272" r="18" fill="#ffffff" stroke="#9bc7ff" stroke-width="8"/>
+    <circle cx="320" cy="214" r="18" fill="#ffffff" stroke="#9bc7ff" stroke-width="8"/>
   </g>
 </svg>

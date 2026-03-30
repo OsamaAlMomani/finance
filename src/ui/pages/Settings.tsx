@@ -291,14 +291,16 @@ export const Settings = () => {
   };
 
   return (
-    <div className="h-full overflow-y-auto p-6">
+    <div className="settings-page page-shell p-6">
       <div className="max-w-5xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold font-heading text-ink">{t('settings.title')}</h2>
+        <div className="page-hero mb-8">
+          <div className="page-copy">
+            <p className="page-eyebrow">{t('sidebar.settings')}</p>
+            <h2 className="page-title heading-font text-ink">{t('settings.title')}</h2>
+            <p className="page-subtitle">{t('settings.subtitle')}</p>
+          </div>
         </div>
 
-        {/* Theme Selection Card */}
         <div className="card mb-8">
           <h3 className="text-xl font-bold mb-6 text-ink">{t('settings.themeTitle')}</h3>
           <div className="flex flex-wrap gap-4">

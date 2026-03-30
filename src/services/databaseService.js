@@ -57,7 +57,8 @@ import {
 } from './v2/sharingService.js';
 import {
   buildDashboardOptimizationPayload,
-  normalizeOptimizationPeriod
+  normalizeOptimizationPeriod,
+  normalizeTrendMonth
 } from './v2/dashboardOptimizationService.js';
 import {
   ensureEnum,
@@ -1573,6 +1574,7 @@ export function getDashboardOptimization(options = {}, context = {}) {
   }));
 
   const periodDays = normalizeOptimizationPeriod(options.periodDays ?? options.period_days);
+  const month = normalizeTrendMonth(options.month);
   const windowStart = `-${Math.max(0, periodDays - 1)} days`;
 
   const spendRow = db.prepare(`
@@ -1617,31 +1619,177 @@ export function getDashboardOptimization(options = {}, context = {}) {
     LIMIT 10
   `).all({ windowStart });
 
+  const budgetRows = db.prepare(`
+    SELECT
+      b.id,
+      b.category_id,
+      b.period,
+      b.limit_amount,
+      COALESCE(c.name, 'Uncategorized') AS category_name,
+      COALESCE(c.color, '#6B7280') AS category_color,
+      CASE
+        WHEN b.period = 'weekly' THEN COALESCE((
+          SELECT SUM(t.amount)
+          FROM transactions t
+          WHERE t.type = 'expense'
+            AND t.category_id = b.category_id
+            AND date(t.date) >= date('now', '-6 days')
+            AND date(t.date) <= date('now')
+        ), 0)
+        WHEN b.period = 'yearly' THEN COALESCE((
+          SELECT SUM(t.amount)
+          FROM transactions t
+          WHERE t.type = 'expense'
+            AND t.category_id = b.category_id
+            AND date(t.date) >= date('now', 'start of year')
+            AND date(t.date) <= date('now')
+        ), 0)
+        ELSE COALESCE((
+          SELECT SUM(t.amount)
+          FROM transactions t
+          WHERE t.type = 'expense'
+            AND t.category_id = b.category_id
+            AND date(t.date) >= date('now', 'start of month')
+            AND date(t.date) <= date('now')
+        ), 0)
+      END AS spent_amount,
+      COALESCE((
+        SELECT COUNT(*)
+        FROM alerts a
+        WHERE a.source_type = 'budget'
+          AND a.status IN ('active', 'acknowledged', 'snoozed')
+          AND a.source_id LIKE b.id || ':%'
+      ), 0) AS alert_count
+    FROM budgets b
+    LEFT JOIN categories c ON c.id = b.category_id
+    ORDER BY spent_amount DESC, b.limit_amount DESC, category_name ASC
+    LIMIT 8
+  `).all();
+
   const debtRows = db.prepare(`
-    SELECT id, name, current_balance, interest_rate, payment_amount, due_status
-    FROM loans
+    SELECT
+      l.id,
+      l.name,
+      l.current_balance,
+      l.interest_rate,
+      l.payment_amount,
+      l.due_status,
+      COALESCE((
+        SELECT COUNT(*)
+        FROM alerts a
+        WHERE a.source_type = 'loan'
+          AND a.source_id = l.id
+          AND a.status IN ('active', 'acknowledged', 'snoozed')
+      ), 0) AS alert_count
+    FROM loans l
     WHERE COALESCE(current_balance, 0) > 0
     ORDER BY current_balance DESC, interest_rate DESC
     LIMIT 12
   `).all();
 
   const billRows = db.prepare(`
-    SELECT id, name, amount, next_due_date, is_paid
-    FROM bills
-    WHERE COALESCE(is_paid, 0) <> 1
-    ORDER BY date(next_due_date) ASC
+    SELECT
+      b.id,
+      b.name,
+      b.amount,
+      b.next_due_date,
+      b.is_paid,
+      COALESCE((
+        SELECT COUNT(*)
+        FROM alerts a
+        WHERE a.source_type = 'bill'
+          AND a.source_id = b.id
+          AND a.status IN ('active', 'acknowledged', 'snoozed')
+      ), 0) AS alert_count
+    FROM bills b
+    WHERE COALESCE(b.is_paid, 0) <> 1
+    ORDER BY date(b.next_due_date) ASC
     LIMIT 20
   `).all();
+
+  const goalRows = db.prepare(`
+    SELECT
+      g.id,
+      g.name,
+      g.current_amount,
+      g.target_amount,
+      g.target_date,
+      g.risk_status,
+      COALESCE(a.name, '') AS linked_account_name
+    FROM goals g
+    LEFT JOIN accounts a ON a.id = g.linked_account_id
+    WHERE COALESCE(g.target_amount, 0) > 0
+    ORDER BY
+      CASE g.risk_status
+        WHEN 'critical' THEN 4
+        WHEN 'at_risk' THEN 3
+        WHEN 'watch' THEN 2
+        ELSE 1
+      END DESC,
+      date(COALESCE(g.target_date, '2999-12-31')) ASC,
+      g.name ASC
+    LIMIT 8
+  `).all();
+
+  const trendDailyTotalRows = db.prepare(`
+    SELECT
+      date(t.date) AS date_key,
+      COALESCE(SUM(t.amount), 0) AS total_amount
+    FROM transactions t
+    WHERE t.type = 'expense'
+      AND substr(t.date, 1, 7) = @month
+    GROUP BY date(t.date)
+    ORDER BY date_key ASC
+  `).all({ month });
+
+  const trendDailyTagRows = db.prepare(`
+    SELECT
+      date(t.date) AS date_key,
+      tg.id AS tag_id,
+      tg.name AS tag_name,
+      COALESCE(tg.color, '#6B7280') AS tag_color,
+      COALESCE(SUM(t.amount), 0) AS amount
+    FROM transactions t
+    JOIN transaction_tags tt ON tt.transaction_id = t.id
+    JOIN tags tg ON tg.id = tt.tag_id
+    WHERE t.type = 'expense'
+      AND substr(t.date, 1, 7) = @month
+    GROUP BY date(t.date), tg.id, tg.name, tg.color
+    ORDER BY date_key ASC, tag_name ASC
+  `).all({ month });
+
+  const trendTagSummaryRows = db.prepare(`
+    SELECT
+      tg.id AS tag_id,
+      tg.name AS tag_name,
+      COALESCE(tg.color, '#6B7280') AS tag_color,
+      COUNT(DISTINCT t.id) AS tx_count,
+      COALESCE(SUM(t.amount), 0) AS amount
+    FROM transactions t
+    JOIN transaction_tags tt ON tt.transaction_id = t.id
+    JOIN tags tg ON tg.id = tt.tag_id
+    WHERE t.type = 'expense'
+      AND substr(t.date, 1, 7) = @month
+    GROUP BY tg.id, tg.name, tg.color
+    HAVING amount > 0
+    ORDER BY amount DESC, tag_name ASC
+  `).all({ month });
 
   return buildDashboardOptimizationPayload({
     asOf: new Date().toISOString(),
     periodDays,
+    month,
     totalSpend: spendRow?.total_spend || 0,
     billsDue7d: dueSoonRow?.due_soon_total || 0,
     debtLoad: debtLoadRow?.debt_load_total || 0,
     categories: categoryRows,
+    budgets: budgetRows,
     loans: debtRows,
-    bills: billRows
+    bills: billRows,
+    goals: goalRows,
+    dailyTotals: trendDailyTotalRows,
+    dailyTagRows: trendDailyTagRows,
+    tags: trendTagSummaryRows
   });
 }
 
@@ -1807,6 +1955,34 @@ export function addGoalContribution(input = {}) {
   const sourceType = String(input.sourceType || input.source_type || 'manual').trim() || 'manual';
   const sourceId = input.sourceId || input.source_id || null;
   const notes = typeof input.notes === 'string' ? input.notes.trim() : '';
+  const linkedAccountId = String(input.accountId || input.account_id || goal.linked_account_id || '').trim() || null;
+  const createLinkedTransaction = input.createLinkedTransaction !== false;
+
+  if (createLinkedTransaction && !input.transactionId && !input.transaction_id && linkedAccountId) {
+    const linkedTransaction = addTransaction({
+      id: `goal_tx_${contributionId}`,
+      accountId: linkedAccountId,
+      category: input.categoryId || input.category_id || null,
+      subcategory: input.subcategoryId || input.subcategory_id || null,
+      type: amount > 0 ? 'income' : 'expense',
+      amount: Math.abs(amount),
+      date: contributionDate,
+      merchant: `${amount > 0 ? 'Goal contribution' : 'Goal withdrawal'} - ${goal.name || goalId}`,
+      notes: notes || `${amount > 0 ? 'Goal contribution' : 'Goal withdrawal'} entry linked to ${goal.name || goalId}`,
+      tags: toArray(input.tags),
+      tagIds: toArray(input.tagIds || input.tag_ids),
+      labelIds: toArray(input.labelIds || input.label_ids),
+      goalId,
+      attachmentPath: input.attachmentPath || input.attachment_path || null,
+      taxAmount: sanitizeNumber(input.taxAmount || input.tax_amount, 0)
+    });
+
+    return {
+      goal: db.prepare('SELECT * FROM goals WHERE id = ?').get(goalId),
+      contribution: db.prepare('SELECT * FROM goal_contributions WHERE id = ?').get(`goal_contrib_${linkedTransaction.id}`),
+      linkedTransaction
+    };
+  }
 
   db.prepare(`
     INSERT INTO goal_contributions (id, goal_id, transaction_id, amount, date, source_type, source_id, notes)
@@ -1837,7 +2013,8 @@ export function addGoalContribution(input = {}) {
 
   return {
     goal: updatedGoal,
-    contribution: db.prepare('SELECT * FROM goal_contributions WHERE id = ?').get(contributionId)
+    contribution: db.prepare('SELECT * FROM goal_contributions WHERE id = ?').get(contributionId),
+    linkedTransaction: null
   };
 }
 
